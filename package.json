@@ -1,0 +1,23 @@
+{
+  "name": "stockflow",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "14.2.3",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "@supabase/supabase-js": "^2.43.4",
+    "@supabase/auth-helpers-nextjs": "^0.10.0",
+    "resend": "^3.2.0",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "eslint": "8",
+    "eslint-config-next": "14.2.3"
+  }
+}
