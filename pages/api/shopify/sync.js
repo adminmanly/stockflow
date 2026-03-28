@@ -27,7 +27,7 @@ export default async function handler(req, res) {
     // Map Shopify locations to your FC IDs
     // UPDATE THESE to match your actual Shopify location names
     const LOCATION_MAP = {
-      'Victoria': 'vi',
+      '11/81 Cooper St, Campbellfield': 'vi',
       'Internal Warehouse': 'vi',
       // Tidal Wave uses ShipHero, not Shopify inventory
     }
