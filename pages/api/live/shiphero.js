@@ -41,18 +41,24 @@ export default async function handler(req, res) {
         'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify({
-        query: `query {
-          inventory(first: 200) {
-            edges {
-              node {
-                sku
-                on_hand
-                available
-                allocated
-              }
-            }
+query: `query {
+  products {
+    request_id
+    complexity
+    data(first: 200) {
+      edges {
+        node {
+          sku
+          warehouse_products {
+            warehouse_id
+            on_hand
+            available
           }
-        }`
+        }
+      }
+    }
+  }
+}`
       })
     })
 
@@ -61,10 +67,12 @@ export default async function handler(req, res) {
 
     // Build stock by SKU
     const inventory = {}
-    for (const edge of (invData.data?.inventory?.edges || [])) {
-      const node = edge.node
-      if (node.sku) inventory[node.sku] = { available: node.available || 0, on_hand: node.on_hand || 0 }
-    }
+    for (const edge of (invData.data?.products?.data?.edges || [])) {
+  const node = edge.node
+  if (!node.sku) continue
+  const wh = node.warehouse_products?.[0]
+  inventory[node.sku] = { available: wh?.available || 0, on_hand: wh?.on_hand || 0 }
+}
 
     // Map to product names
     const stockByProduct = {}
