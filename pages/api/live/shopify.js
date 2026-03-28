@@ -24,7 +24,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1. Get products to build inventory_item_id -> SKU map
     const prodRes = await fetch(`${BASE}/products.json?limit=250&status=active`, { headers: HEADERS })
     if (!prodRes.ok) throw new Error(`Shopify products error: ${prodRes.status}`)
     const prodData = await prodRes.json()
@@ -38,26 +37,28 @@ export default async function handler(req, res) {
       }
     }
 
-    // 2. Get all locations
+    // Get all locations and find the AU one
     const locRes = await fetch(`${BASE}/locations.json`, { headers: HEADERS })
     if (!locRes.ok) throw new Error(`Shopify locations error: ${locRes.status}`)
     const locData = await locRes.json()
     const locations = locData.locations.filter(l => l.active)
+    const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
 
-    // 3. Get inventory levels per location and sum globally
-    const stockBySku = {}
-    for (const loc of locations) {
-      const invRes = await fetch(`${BASE}/inventory_levels.json?location_id=${loc.id}&limit=250`, { headers: HEADERS })
-      if (!invRes.ok) continue
-      const invData = await invRes.json()
-      for (const level of invData.inventory_levels) {
-        const sku = itemToSku[level.inventory_item_id]
-        if (!sku || level.available === null) continue
-        stockBySku[sku] = (stockBySku[sku] || 0) + Math.max(0, level.available)
+    // Get AU warehouse stock
+    const auStockBySku = {}
+    if (auLocation) {
+      const invRes = await fetch(`${BASE}/inventory_levels.json?location_id=${auLocation.id}&limit=250`, { headers: HEADERS })
+      if (invRes.ok) {
+        const invData = await invRes.json()
+        for (const level of invData.inventory_levels) {
+          const sku = itemToSku[level.inventory_item_id]
+          if (!sku || level.available === null) continue
+          auStockBySku[sku] = Math.max(0, level.available)
+        }
       }
     }
 
-    // 4. Get 30-day sales velocity
+    // Get 30-day velocity
     const since = new Date()
     since.setDate(since.getDate() - 30)
     const ordersRes = await fetch(
@@ -74,20 +75,19 @@ export default async function handler(req, res) {
       }
     }
 
-    // 5. Build response by product name
-    const stockByProduct = {}
+    const auStockByProduct = {}
     const velocityByProduct = {}
     for (const [sku, productName] of Object.entries(SKU_MAP)) {
-      stockByProduct[productName] = stockBySku[sku] || 0
-      velocityByProduct[productName] = +(( soldBySku[sku] || 0) / 30).toFixed(1)
+      auStockByProduct[productName] = auStockBySku[sku] || 0
+      velocityByProduct[productName] = +((soldBySku[sku] || 0) / 30).toFixed(1)
     }
 
     return res.json({
       ok: true,
       source: 'shopify',
-      stock: stockByProduct,
+      au_stock: auStockByProduct,
       velocity: velocityByProduct,
-      locations: locations.map(l => l.name),
+      au_location: auLocation?.name || 'not found',
       orders_analysed: (ordersData.orders || []).length,
     })
 
