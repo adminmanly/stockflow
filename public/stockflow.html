@@ -420,10 +420,12 @@ async function syncShopify(btn){
     STOCK.shopify={};
     for(const[product,qty]of Object.entries(d.stock)){STOCK.shopify[product]=qty}
     // Update daily velocity with real 30-day data
-    for(const[product,vel]of Object.entries(d.velocity)){
-      if(DAILY.tw)DAILY.tw[product]=Math.ceil(vel*(2/3));  // approx US share
-      if(DAILY.vi)DAILY.vi[product]=Math.ceil(vel*(1/3));  // approx AU share
-    }
+ for(const[product,vel]of Object.entries(d.velocity)){
+  if(!DAILY.tw)DAILY.tw={};
+  if(!DAILY.vi)DAILY.vi={};
+  DAILY.tw[product]=vel;
+  DAILY.vi[product]=vel;
+}
     skConnected=true;
     btn.textContent='● Shopify';btn.style.color='var(--green)';btn.disabled=false;
     updateDsrc();rActive();
@@ -448,8 +450,7 @@ document.getElementById('sk-btn').addEventListener('click',function(){
 // Auto-sync on page load if previously connected (stored in sessionStorage)
 window.addEventListener('load', () => {
   syncShopify(document.getElementById('sk-btn'));
-  if(sessionStorage.getItem('sh_connected')==='1')
-    syncShipHero(document.getElementById('sh-btn'));
+  syncShipHero(document.getElementById('sh-btn'));
 });
 switchTab('po');
 </script>
