@@ -416,14 +416,10 @@ async function syncShopify(btn){
     const d=await r.json();
     if(!r.ok||d.error)throw new Error(d.error||'Shopify error');
     // Populate global stock totals and velocity
-STOCK.vi={};
-for(const[product,qty]of Object.entries(d.au_stock)){STOCK.vi[product]=qty}
+if(d.au_stock){STOCK.vi={};for(const[product,qty]of Object.entries(d.au_stock)){STOCK.vi[product]=qty}}
     // Update daily velocity with real 30-day data
  for(const[product,vel]of Object.entries(d.velocity)){
-  if(!DAILY.tw)DAILY.tw={};
-  if(!DAILY.vi)DAILY.vi={};
-  DAILY.tw[product]=vel;
-  DAILY.vi[product]=vel;
+if(d.velocity){if(!DAILY.tw)DAILY.tw={};if(!DAILY.vi)DAILY.vi={};for(const[product,vel]of Object.entries(d.velocity)){DAILY.tw[product]=vel;DAILY.vi[product]=vel}}
 }
     skConnected=true;
     btn.textContent='● Shopify';btn.style.color='var(--green)';btn.disabled=false;
