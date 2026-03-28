@@ -446,8 +446,11 @@ document.getElementById('sk-btn').addEventListener('click',function(){
 });
 
 // Auto-sync on page load if previously connected (stored in sessionStorage)
-if(sessionStorage.getItem('sh_connected')==='1')syncShipHero(document.getElementById('sh-btn'));
-if(sessionStorage.getItem('sk_connected')==='1')syncShopify(document.getElementById('sk-btn'));
+window.addEventListener('load', () => {
+  syncShopify(document.getElementById('sk-btn'));
+  if(sessionStorage.getItem('sh_connected')==='1')
+    syncShipHero(document.getElementById('sh-btn'));
+});
 switchTab('po');
 </script>
 </body>
