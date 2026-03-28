@@ -1,25 +1,45 @@
 // pages/api/live/shiphero.js
-// Called by the frontend to get live Tidal Wave stock from ShipHero
-// Token stays server-side — never exposed to the browser
+// ShipHero GraphQL API — authenticates with email/password to get token
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).end()
-
-  // Allow CORS from your own domain
   res.setHeader('Access-Control-Allow-Origin', '*')
 
-  const token = process.env.SHIPHERO_API_TOKEN
-  if (!token) {
-    return res.status(500).json({ error: 'ShipHero token not configured' })
+  const email = process.env.SHIPHERO_EMAIL
+  const password = process.env.SHIPHERO_PASSWORD
+  const SHIPHERO_URL = 'https://public-api.shiphero.com/graphql'
+
+  if (!email || !password) {
+    return res.status(500).json({ error: 'ShipHero email/password not configured. Add SHIPHERO_EMAIL and SHIPHERO_PASSWORD to Vercel env vars.' })
   }
 
   try {
-    // First get an auth token using email/password if needed
-    // ShipHero GraphQL endpoint
-    const SHIPHERO_URL = 'https://public-api.shiphero.com/graphql'
-
-    // Step 1: Get auth token
+    // Step 1: Get auth token using email + password
     const authRes = await fetch(SHIPHERO_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `
+          mutation Login($email: String!, $password: String!) {
+            login(email: $email, password: $password) {
+              complexity
+              token
+              refresh_token
+            }
+          }
+        `,
+        variables: { email, password }
+      })
+    })
+
+    const authData = await authRes.json()
+    if (authData.errors) throw new Error('ShipHero auth failed: ' + authData.errors[0].message)
+    
+    const token = authData.data?.login?.token
+    if (!token) throw new Error('No token returned from ShipHero')
+
+    // Step 2: Fetch inventory with the token
+    const invRes = await fetch(SHIPHERO_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -28,26 +48,13 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         query: `
           query {
-            inventory(first: 100) {
+            inventory(first: 200) {
               edges {
                 node {
                   sku
                   on_hand
                   available
                   allocated
-                  warehouse_products {
-                    edges {
-                      node {
-                        on_hand
-                        available
-                        allocated
-                        warehouse {
-                          id
-                          name
-                        }
-                      }
-                    }
-                  }
                 }
               }
               pageInfo {
@@ -60,48 +67,22 @@ export default async function handler(req, res) {
       })
     })
 
-    if (!authRes.ok) {
-      throw new Error(`ShipHero API error: ${authRes.status}`)
-    }
+    const invData = await invRes.json()
+    if (invData.errors) throw new Error('ShipHero inventory error: ' + invData.errors[0].message)
 
-    const data = await authRes.json()
-
-    if (data.errors) {
-      throw new Error(data.errors[0].message)
-    }
-
-    // Map SKUs to stock counts
+    // Build SKU -> stock map
     const inventory = {}
-    const warehouseId = process.env.SHIPHERO_TIDAL_WAVE_WAREHOUSE_ID
-
-    for (const edge of (data.data?.inventory?.edges || [])) {
+    for (const edge of (invData.data?.inventory?.edges || [])) {
       const node = edge.node
       if (!node.sku) continue
-
-      let onHand = node.on_hand || 0
-      let available = node.available || 0
-
-      // If warehouse ID specified, get per-warehouse numbers
-      if (warehouseId && node.warehouse_products?.edges?.length) {
-        const whNode = node.warehouse_products.edges.find(
-          e => e.node.warehouse?.id === warehouseId
-        )
-        if (whNode) {
-          onHand = whNode.node.on_hand || 0
-          available = whNode.node.available || 0
-        }
-      }
-
       inventory[node.sku] = {
-        sku: node.sku,
-        on_hand: onHand,
-        available: available,
+        on_hand: node.on_hand || 0,
+        available: node.available || 0,
         allocated: node.allocated || 0,
       }
     }
 
-    // Map SKUs to your product names
-    // These match your Shopify CSV SKUs
+    // Map your SKUs to product names
     const SKU_MAP = {
       'BWc&c-MANLY': 'Body Wash',
       'Dc&c-MANLY': 'Deodorant',
@@ -113,7 +94,6 @@ export default async function handler(req, res) {
       'CW-MANLY': 'Cooling Wipes',
     }
 
-    // Build response keyed by product name
     const stockByProduct = {}
     for (const [sku, productName] of Object.entries(SKU_MAP)) {
       const inv = inventory[sku]
@@ -127,13 +107,12 @@ export default async function handler(req, res) {
     return res.json({
       ok: true,
       source: 'shiphero',
-      warehouse: warehouseId || 'default',
       stock: stockByProduct,
-      raw_count: Object.keys(inventory).length,
+      raw_skus: Object.keys(inventory).length,
     })
 
   } catch (err) {
-    console.error('[ShipHero API]', err.message)
+    console.error('[ShipHero]', err.message)
     return res.status(500).json({ error: err.message })
   }
 }
