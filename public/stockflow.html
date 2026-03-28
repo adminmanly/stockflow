@@ -80,7 +80,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <body>
 <div id="mroot"></div>
 <div class="sfh">
-  <div class="sfb">Stockflow <span id="dsrc">demo data</span></div>
+  <div class="sfb">Stockflow </div>
   <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
     <span style="font-size:12px;padding:3px 10px;border:0.5px solid var(--border);border-radius:99px;color:var(--text2)">🇺🇸 Tidal Wave</span>
     <span style="font-size:12px;padding:3px 10px;border:0.5px solid var(--border);border-radius:99px;color:var(--text2)">🇦🇺 Internal WH</span>
@@ -110,7 +110,7 @@ const CORE_P=['Body Wash','Deodorant','Shampoo','Conditioner','Ball Deodorant'];
 const GIFT_P=['Body Buffer','Scalp Scrubber','Cooling Wipes'];
 const ALL_TRACK=[...CORE_P,...GIFT_P];
 const PRICES=Object.fromEntries(ALL_PRODS.filter(p=>ALL_TRACK.includes(p.t)).map(p=>[p.t,p.p]));
-const STOCK={tw:{'Body Wash':320,'Deodorant':290,'Shampoo':150,'Conditioner':130,'Ball Deodorant':200,'Body Buffer':150,'Scalp Scrubber':120,'Cooling Wipes':200},vi:{'Body Wash':180,'Deodorant':160,'Shampoo':90,'Conditioner':80,'Ball Deodorant':100,'Body Buffer':80,'Scalp Scrubber':60,'Cooling Wipes':90}};
+const STOCK={tw:{},vi:{}};
 const DAILY={tw:{'Body Wash':15,'Deodorant':13,'Shampoo':6,'Conditioner':5,'Ball Deodorant':4,'Body Buffer':8,'Scalp Scrubber':5,'Cooling Wipes':6},vi:{'Body Wash':10,'Deodorant':9,'Shampoo':4,'Conditioner':3,'Ball Deodorant':3,'Body Buffer':5,'Scalp Scrubber':3,'Cooling Wipes':4}};
 const BUNDLES=[{n:'Body Care Kit',sku:'BCKc&c',c:{'Body Wash':1,'Deodorant':1},p:90.26},{n:'Shower Essentials',sku:'SEC&C',c:{'Body Wash':1,'Deodorant':1,'Shampoo':1,'Conditioner':1},p:132.92},{n:'Hair Care Kit',sku:'HCKc&c',c:{'Shampoo':1,'Conditioner':1},p:67.66},{n:'Shower Trio Kit',sku:'STKc&c',c:{'Body Wash':1,'Shampoo':1,'Conditioner':1},p:86.77},{n:'Ball Package',sku:'BPc&c',c:{'Ball Deodorant':1,'Body Buffer':1},p:65.50}];
 let SUPPLIERS=[{id:'s1',name:'Clean Co AU',contact:'James Wilson',email:'orders@cleanceau.com',phone:'+61 3 9000 1234',addr:'12 Supply St, Melbourne VIC 3000',country:'Australia',currency:'AUD',payTerms:'30% deposit, 70% on receipt',bankName:'ANZ Bank',bankAcct:'••••4521',notes:'Primary AU supplier.',terms:{deposit:30,port:0,receipt:70}},{id:'s2',name:'Fresh Supply US',contact:'Sarah Chen',email:'po@freshsupply.com',phone:'+1 310 555 0199',addr:'900 Warehouse Blvd, Los Angeles CA 90001',country:'USA',currency:'USD',payTerms:'30% deposit, 40% at port, 30% on receipt',bankName:'Chase Bank',bankAcct:'••••8832',notes:'Ships direct to Tidal Wave.',terms:{deposit:30,port:40,receipt:30}}];
