@@ -24,6 +24,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    // 1. Get products -> inventory_item_id map
     const prodRes = await fetch(`${BASE}/products.json?limit=250&status=active`, { headers: HEADERS })
     if (!prodRes.ok) throw new Error(`Shopify products error: ${prodRes.status}`)
     const prodData = await prodRes.json()
@@ -37,14 +38,14 @@ export default async function handler(req, res) {
       }
     }
 
-    // Get all locations and find the AU one
+    // 2. Get AU warehouse location
     const locRes = await fetch(`${BASE}/locations.json`, { headers: HEADERS })
     if (!locRes.ok) throw new Error(`Shopify locations error: ${locRes.status}`)
     const locData = await locRes.json()
     const locations = locData.locations.filter(l => l.active)
     const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
 
-    // Get AU warehouse stock
+    // 3. Get AU warehouse stock
     const auStockBySku = {}
     if (auLocation) {
       const invRes = await fetch(`${BASE}/inventory_levels.json?location_id=${auLocation.id}&limit=250`, { headers: HEADERS })
@@ -58,34 +59,41 @@ export default async function handler(req, res) {
       }
     }
 
-    // Get 30-day velocity
-    const since = new Date()
-    since.setDate(since.getDate() - 30)
-const soldBySku = {}
-let ordersUrl = `${BASE}/orders.json?status=any&created_at_min=${since.toISOString()}&limit=250&fields=line_items,created_at`
-let totalOrders = 0
-while(ordersUrl) {
-  const ordersRes = await fetch(ordersUrl, { headers: HEADERS })
-  if (!ordersRes.ok) break
-  const ordersData = await ordersRes.json()
-  totalOrders += (ordersData.orders || []).length
-  for (const order of ordersData.orders || []) {
-    for (const item of order.line_items) {
-      if (!item.sku) continue
-      soldBySku[item.sku] = (soldBySku[item.sku] || 0) + item.quantity
-    }
-  }
-  // Get next page from Link header
-  const linkHeader = ordersRes.headers.get('Link') || ''
-  const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
-  ordersUrl = nextMatch ? nextMatch[1] : null
-}
+    // 4. Get velocity using last 7 days only (avoids timeout) then scale to daily
+    const since7 = new Date()
+    since7.setDate(since7.getDate() - 7)
+    
+    const soldBySku = {}
+    let ordersUrl = `${BASE}/orders.json?status=any&created_at_min=${since7.toISOString()}&limit=250&fields=line_items,financial_status`
+    let totalOrders = 0
+    let pageCount = 0
 
+    while (ordersUrl && pageCount < 10) { // max 10 pages = 2500 orders over 7 days
+      const ordersRes = await fetch(ordersUrl, { headers: HEADERS })
+      if (!ordersRes.ok) break
+      const ordersData = await ordersRes.json()
+      totalOrders += (ordersData.orders || []).length
+      pageCount++
+
+      for (const order of ordersData.orders || []) {
+        for (const item of order.line_items) {
+          if (!item.sku) continue
+          soldBySku[item.sku] = (soldBySku[item.sku] || 0) + item.quantity
+        }
+      }
+
+      const linkHeader = ordersRes.headers.get('Link') || ''
+      const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
+      ordersUrl = nextMatch ? nextMatch[1] : null
+    }
+
+    // 5. Build response — divide by 7 to get daily velocity
     const auStockByProduct = {}
     const velocityByProduct = {}
+
     for (const [sku, productName] of Object.entries(SKU_MAP)) {
       auStockByProduct[productName] = auStockBySku[sku] || 0
-      velocityByProduct[productName] = +((soldBySku[sku] || 0) / 30).toFixed(1)
+      velocityByProduct[productName] = +((soldBySku[sku] || 0) / 7).toFixed(1)
     }
 
     return res.json({
@@ -95,6 +103,7 @@ while(ordersUrl) {
       velocity: velocityByProduct,
       au_location: auLocation?.name || 'not found',
       orders_analysed: totalOrders,
+      period_days: 7,
     })
 
   } catch (err) {
