@@ -61,19 +61,25 @@ export default async function handler(req, res) {
     // Get 30-day velocity
     const since = new Date()
     since.setDate(since.getDate() - 30)
-    const ordersRes = await fetch(
-      `${BASE}/orders.json?status=any&created_at_min=${since.toISOString()}&limit=250&fields=line_items,created_at`,
-      { headers: HEADERS }
-    )
-    const ordersData = ordersRes.ok ? await ordersRes.json() : { orders: [] }
-
-    const soldBySku = {}
-    for (const order of ordersData.orders || []) {
-      for (const item of order.line_items) {
-        if (!item.sku) continue
-        soldBySku[item.sku] = (soldBySku[item.sku] || 0) + item.quantity
-      }
+const soldBySku = {}
+let ordersUrl = `${BASE}/orders.json?status=any&created_at_min=${since.toISOString()}&limit=250&fields=line_items,created_at`
+let totalOrders = 0
+while(ordersUrl) {
+  const ordersRes = await fetch(ordersUrl, { headers: HEADERS })
+  if (!ordersRes.ok) break
+  const ordersData = await ordersRes.json()
+  totalOrders += (ordersData.orders || []).length
+  for (const order of ordersData.orders || []) {
+    for (const item of order.line_items) {
+      if (!item.sku) continue
+      soldBySku[item.sku] = (soldBySku[item.sku] || 0) + item.quantity
     }
+  }
+  // Get next page from Link header
+  const linkHeader = ordersRes.headers.get('Link') || ''
+  const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
+  ordersUrl = nextMatch ? nextMatch[1] : null
+}
 
     const auStockByProduct = {}
     const velocityByProduct = {}
@@ -88,7 +94,7 @@ export default async function handler(req, res) {
       au_stock: auStockByProduct,
       velocity: velocityByProduct,
       au_location: auLocation?.name || 'not found',
-      orders_analysed: (ordersData.orders || []).length,
+      orders_analysed: totalOrders,
     })
 
   } catch (err) {
