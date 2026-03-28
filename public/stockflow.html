@@ -278,8 +278,7 @@ function rInventory(){
   // Stock logic:
   // Tidal Wave (tw) = ShipHero live data per SKU
   // Internal WH (vi) = Shopify global total MINUS ShipHero US stock = AU warehouse stock
-  const viStock=p=>(STOCK.shopify?.[p]??0)-(STOCK.tw?.[p]??0);
-  const displayStock=(fcId,p)=>fcId==='vi'&&STOCK.shopify?viStock(p):(STOCK[fcId]?.[p]??0);
+const displayStock=(fcId,p)=>STOCK[fcId]?.[p]??0;
   document.getElementById('tab-inventory').innerHTML=`
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap" id="fctabs">${FCS.map(f=>`<button class="fct${f.id===aFC?' active':''}" data-f="${f.id}">${f.flag} ${f.name}</button>`).join('')}</div>
     ${aFC==='vi'&&STOCK.shopify?`<div style="background:var(--bluebg);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--blue)">📊 Victoria stock = Shopify global total − ShipHero US stock. This reflects what's physically in your AU warehouse.</div>`:''}
