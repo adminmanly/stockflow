@@ -23,6 +23,11 @@ export default async function handler(req, res) {
     'CW-MANLY': 'Cooling Wipes',
   }
 
+  const TRACKED_SKUS = new Set([
+    'BWc&c-MANLY', 'Dc&c-MANLY', 'SHAc&c-MANLY', 'CONc&c-MANLY',
+    'SSC&C', 'BB-MANLY', 'SCALP-MANLY', 'CW-MANLY'
+  ])
+
   try {
     // 1. Get products -> inventory_item_id map
     const prodRes = await fetch(`${BASE}/products.json?limit=250&status=active`, { headers: HEADERS })
@@ -38,14 +43,14 @@ export default async function handler(req, res) {
       }
     }
 
-    // 2. Get AU warehouse location
+    // 2. Get AU warehouse location (Cooper St)
     const locRes = await fetch(`${BASE}/locations.json`, { headers: HEADERS })
     if (!locRes.ok) throw new Error(`Shopify locations error: ${locRes.status}`)
     const locData = await locRes.json()
     const locations = locData.locations.filter(l => l.active)
     const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
 
-    // 3. Get AU warehouse stock
+    // 3. Get AU warehouse stock levels
     const auStockBySku = {}
     if (auLocation) {
       const invRes = await fetch(`${BASE}/inventory_levels.json?location_id=${auLocation.id}&limit=250`, { headers: HEADERS })
@@ -59,50 +64,59 @@ export default async function handler(req, res) {
       }
     }
 
-    // 4. Get velocity using last 7 days only (avoids timeout) then scale to daily
+    // 4. Get last 7 days orders split by shipping country
     const since7 = new Date()
     since7.setDate(since7.getDate() - 7)
-    
-    const soldBySku = {}
-    let ordersUrl = `${BASE}/orders.json?status=any&created_at_min=${since7.toISOString()}&limit=250&fields=line_items,financial_status`
+
+    const soldBySkuUS = {}
+    const soldBySkuAU = {}
+    let ordersUrl = `${BASE}/orders.json?status=any&created_at_min=${since7.toISOString()}&limit=250&fields=line_items,shipping_address`
     let totalOrders = 0
     let pageCount = 0
 
-    while (ordersUrl && pageCount < 10) { // max 10 pages = 2500 orders over 7 days
+    while (ordersUrl && pageCount < 10) {
       const ordersRes = await fetch(ordersUrl, { headers: HEADERS })
       if (!ordersRes.ok) break
       const ordersData = await ordersRes.json()
       totalOrders += (ordersData.orders || []).length
       pageCount++
 
-const TRACKED_SKUS = new Set(['BWc&c-MANLY','Dc&c-MANLY','SHAc&c-MANLY','CONc&c-MANLY','SSC&C','BB-MANLY','SCALP-MANLY','CW-MANLY'])
+      for (const order of ordersData.orders || []) {
+        const country = order.shipping_address?.country_code || 'US'
+        const isAU = country === 'AU'
 
-for (const order of ordersData.orders || []) {
-  for (const item of order.line_items) {
-    if (!item.sku || !TRACKED_SKUS.has(item.sku)) continue
-    soldBySku[item.sku] = (soldBySku[item.sku] || 0) + item.quantity
-  }
-}
+        for (const item of order.line_items) {
+          if (!item.sku || !TRACKED_SKUS.has(item.sku)) continue
+          if (isAU) {
+            soldBySkuAU[item.sku] = (soldBySkuAU[item.sku] || 0) + item.quantity
+          } else {
+            soldBySkuUS[item.sku] = (soldBySkuUS[item.sku] || 0) + item.quantity
+          }
+        }
+      }
 
       const linkHeader = ordersRes.headers.get('Link') || ''
       const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
       ordersUrl = nextMatch ? nextMatch[1] : null
     }
 
-    // 5. Build response — divide by 7 to get daily velocity
+    // 5. Build response — divide by 7 for daily velocity per country
     const auStockByProduct = {}
-    const velocityByProduct = {}
+    const velocityUSByProduct = {}
+    const velocityAUByProduct = {}
 
     for (const [sku, productName] of Object.entries(SKU_MAP)) {
       auStockByProduct[productName] = auStockBySku[sku] || 0
-      velocityByProduct[productName] = +((soldBySku[sku] || 0) / 7).toFixed(1)
+      velocityUSByProduct[productName] = +((soldBySkuUS[sku] || 0) / 7).toFixed(1)
+      velocityAUByProduct[productName] = +((soldBySkuAU[sku] || 0) / 7).toFixed(1)
     }
 
     return res.json({
       ok: true,
       source: 'shopify',
       au_stock: auStockByProduct,
-      velocity: velocityByProduct,
+      velocity_us: velocityUSByProduct,
+      velocity_au: velocityAUByProduct,
       au_location: auLocation?.name || 'not found',
       orders_analysed: totalOrders,
       period_days: 7,
