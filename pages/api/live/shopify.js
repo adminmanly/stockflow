@@ -65,14 +65,16 @@ export default async function handler(req, res) {
     }
 
     // 4. Get last 7 days orders split by shipping country
-    const since7 = new Date()
-    since7.setDate(since7.getDate() - 7)
+const since30 = new Date()
+since30.setDate(since30.getDate() - 30)
 
-    const soldBySkuUS = {}
-    const soldBySkuAU = {}
-    let ordersUrl = `${BASE}/orders.json?status=any&created_at_min=${since7.toISOString()}&limit=250&fields=line_items,shipping_address`
+const soldBySkuUS = {}
+const soldBySkuAU = {}
+let ordersUrl = `${BASE}/orders.json?status=any&financial_status=paid&created_at_min=${since30.toISOString()}&limit=250&fields=id,line_items,shipping_address`
     let totalOrders = 0
-    let pageCount = 0
+let pageCount = 0
+
+while (ordersUrl && pageCount < 50) {
 
     while (ordersUrl && pageCount < 10) {
       const ordersRes = await fetch(ordersUrl, { headers: HEADERS })
@@ -108,8 +110,8 @@ if (parseFloat(item.price) === 0) continue  // skip $0 bundle component addition
 
     for (const [sku, productName] of Object.entries(SKU_MAP)) {
       auStockByProduct[productName] = auStockBySku[sku] || 0
-      velocityUSByProduct[productName] = +((soldBySkuUS[sku] || 0) / 7).toFixed(1)
-      velocityAUByProduct[productName] = +((soldBySkuAU[sku] || 0) / 7).toFixed(1)
+velocityUSByProduct[productName] = +((soldBySkuUS[sku] || 0) / 30).toFixed(1)
+velocityAUByProduct[productName] = +((soldBySkuAU[sku] || 0) / 30).toFixed(1)
     }
 
     return res.json({
@@ -120,7 +122,7 @@ if (parseFloat(item.price) === 0) continue  // skip $0 bundle component addition
       velocity_au: velocityAUByProduct,
       au_location: auLocation?.name || 'not found',
       orders_analysed: totalOrders,
-      period_days: 7,
+      period_days: 30,
     })
 
   } catch (err) {
