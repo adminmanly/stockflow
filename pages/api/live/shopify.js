@@ -75,12 +75,14 @@ export default async function handler(req, res) {
       totalOrders += (ordersData.orders || []).length
       pageCount++
 
-      for (const order of ordersData.orders || []) {
-        for (const item of order.line_items) {
-          if (!item.sku) continue
-          soldBySku[item.sku] = (soldBySku[item.sku] || 0) + item.quantity
-        }
-      }
+const TRACKED_SKUS = new Set(['BWc&c-MANLY','Dc&c-MANLY','SHAc&c-MANLY','CONc&c-MANLY','SSC&C','BB-MANLY','SCALP-MANLY','CW-MANLY'])
+
+for (const order of ordersData.orders || []) {
+  for (const item of order.line_items) {
+    if (!item.sku || !TRACKED_SKUS.has(item.sku)) continue
+    soldBySku[item.sku] = (soldBySku[item.sku] || 0) + item.quantity
+  }
+}
 
       const linkHeader = ordersRes.headers.get('Link') || ''
       const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
