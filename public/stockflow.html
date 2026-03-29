@@ -10,7 +10,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 :root{--bg1:#fff;--bg2:#f4f3f0;--border:#e5e4e0;--border2:#d0cfc9;--text1:#1a1a1a;--text2:#666;--text3:#999;--blue:#185fa5;--bluebg:#e6f1fb;--green:#0c6849;--greenbg:#d1ecb8;--warn:#7a4808;--warnbg:#fae0a8;--red:#a32d2d;--redbg:#fcebeb;--radius:8px;--radius-lg:12px}
 .sfh{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:0.5px solid var(--border);background:var(--bg1);flex-wrap:wrap;gap:8px;position:sticky;top:0;z-index:10}
 .sfb{font-size:15px;font-weight:600}
-.sfb span{font-size:12px;font-weight:400;color:var(--text2);margin-left:8px}
 .wrap{max-width:1300px;margin:0 auto;padding:20px}
 .tnav{display:flex;border-bottom:0.5px solid var(--border);margin-bottom:18px;overflow-x:auto;background:var(--bg1);padding:0 20px;position:sticky;top:49px;z-index:9}
 .tb{background:none;border:none;border-bottom:2px solid transparent;padding:10px 12px;font-size:12px;color:var(--text2);cursor:pointer;white-space:nowrap;font-family:inherit;margin-bottom:-0.5px;font-weight:500}
@@ -80,7 +79,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <body>
 <div id="mroot"></div>
 <div class="sfh">
-  <div class="sfb">Stockflow </div>
+  <div class="sfb">Stockflow</div>
   <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
     <span style="font-size:12px;padding:3px 10px;border:0.5px solid var(--border);border-radius:99px;color:var(--text2)">🇺🇸 Tidal Wave</span>
     <span style="font-size:12px;padding:3px 10px;border:0.5px solid var(--border);border-radius:99px;color:var(--text2)">🇦🇺 Internal WH</span>
@@ -102,36 +101,92 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 <script>
 const FCS=[{id:'tw',name:'Tidal Wave',flag:'🇺🇸',loc:'United States'},{id:'vi',name:'Internal WH',flag:'🇦🇺',loc:'Victoria, AU'}];
-const TODAY='2026-03-28';
+const TODAY=new Date().toISOString().split('T')[0];
 const SC={'Draft':{bg:'#e2e0d9',tc:'#4f4e4a',pr:0},'Submitted':{bg:'#d8e9f7',tc:'#185fa5',pr:12},'Confirmed':{bg:'#e3e0fc',tc:'#4540a8',pr:25},'In Production':{bg:'#f4dbe8',tc:'#882a4e',pr:38},'Shipped':{bg:'#caeedd',tc:'#0c6849',pr:55},'In Transit':{bg:'#9ddfc6',tc:'#064d3a',pr:68},'Customs':{bg:'#fae0a8',tc:'#7a4808',pr:72},'At FC':{bg:'#f7be58',tc:'#5a3300',pr:85},'Received':{bg:'#d1ecb8',tc:'#2f5e0e',pr:100}};
-const SHOPIFY_PRODUCTS={'Core products':[{t:'Body Wash',sku:'BWc&c-MANLY',p:33.83},{t:'Deodorant',sku:'Dc&c-MANLY',p:31.43},{t:'Shampoo',sku:'SHAc&c-MANLY',p:33.83},{t:'Conditioner',sku:'CONc&c-MANLY',p:33.83},{t:'Ball Deodorant',sku:'SSC&C',p:31.67}],'Free gifts & add-ons':[{t:'Body Buffer',sku:'BB-MANLY',p:20.00},{t:'Scalp Scrubber',sku:'SCALP-MANLY',p:20.00},{t:'Cooling Wipes',sku:'CW-MANLY',p:25.00}],'Accessories':[{t:'Face Towel',sku:null,p:30.00},{t:'Dopp Kit',sku:null,p:30.00}],'Bundles & kits':[{t:'Body Care Kit',sku:'BCKc&c',p:90.26},{t:'Shower Essentials',sku:'SEC&C',p:132.92},{t:'Hair Care Kit',sku:'HCKc&c',p:67.66},{t:'Shower Trio Kit',sku:'STKc&c',p:86.77},{t:'Ball Package',sku:'BPc&c',p:65.50},{t:'Manly Complete Hygiene Kit',sku:'SE',p:98.90}],'Single products':[{t:'Restore & Hydrate',sku:'RESTOREHYDRATE',p:42.47},{t:'Essentials Package',sku:'OLDSE',p:153.16}]};
+const SHOPIFY_PRODUCTS={'Core products':[{t:'Body Wash',sku:'BWc&c-MANLY',p:33.83},{t:'Deodorant',sku:'Dc&c-MANLY',p:31.43},{t:'Shampoo',sku:'SHAc&c-MANLY',p:33.83},{t:'Conditioner',sku:'CONc&c-MANLY',p:33.83},{t:'Ball Deodorant',sku:'SSC&C',p:31.67}],'Free gifts & add-ons':[{t:'Body Buffer',sku:'BB-MANLY',p:20.00},{t:'Scalp Scrubber',sku:'SCALP-MANLY',p:20.00},{t:'Cooling Wipes',sku:'CW-MANLY',p:25.00}],'Accessories':[{t:'Face Towel',sku:null,p:30.00},{t:'Dopp Kit',sku:null,p:30.00}],'Bundles & kits':[{t:'Body Care Kit',sku:'BCKc&c',p:90.26},{t:'Shower Essentials',sku:'SEC&C',p:132.92},{t:'Hair Care Kit',sku:'HCKc&c',p:67.66},{t:'Shower Trio Kit',sku:'STKc&c',p:86.77},{t:'Ball Package',sku:'BPc&c',p:65.50}],'Single products':[{t:'Restore & Hydrate',sku:'RESTOREHYDRATE',p:42.47},{t:'Essentials Package',sku:'OLDSE',p:153.16}]};
 const ALL_PRODS=Object.values(SHOPIFY_PRODUCTS).flat();
 const CORE_P=['Body Wash','Deodorant','Shampoo','Conditioner','Ball Deodorant'];
 const GIFT_P=['Body Buffer','Scalp Scrubber','Cooling Wipes'];
 const ALL_TRACK=[...CORE_P,...GIFT_P];
 const PRICES=Object.fromEntries(ALL_PRODS.filter(p=>ALL_TRACK.includes(p.t)).map(p=>[p.t,p.p]));
-const STOCK={tw:{},vi:{}};
-const DAILY={tw:{'Body Wash':15,'Deodorant':13,'Shampoo':6,'Conditioner':5,'Ball Deodorant':4,'Body Buffer':8,'Scalp Scrubber':5,'Cooling Wipes':6},vi:{'Body Wash':10,'Deodorant':9,'Shampoo':4,'Conditioner':3,'Ball Deodorant':3,'Body Buffer':5,'Scalp Scrubber':3,'Cooling Wipes':4}};
 const BUNDLES=[{n:'Body Care Kit',sku:'BCKc&c',c:{'Body Wash':1,'Deodorant':1},p:90.26},{n:'Shower Essentials',sku:'SEC&C',c:{'Body Wash':1,'Deodorant':1,'Shampoo':1,'Conditioner':1},p:132.92},{n:'Hair Care Kit',sku:'HCKc&c',c:{'Shampoo':1,'Conditioner':1},p:67.66},{n:'Shower Trio Kit',sku:'STKc&c',c:{'Body Wash':1,'Shampoo':1,'Conditioner':1},p:86.77},{n:'Ball Package',sku:'BPc&c',c:{'Ball Deodorant':1,'Body Buffer':1},p:65.50}];
 let SUPPLIERS=[{id:'s1',name:'Clean Co AU',contact:'James Wilson',email:'orders@cleanceau.com',phone:'+61 3 9000 1234',addr:'12 Supply St, Melbourne VIC 3000',country:'Australia',currency:'AUD',payTerms:'30% deposit, 70% on receipt',bankName:'ANZ Bank',bankAcct:'••••4521',notes:'Primary AU supplier.',terms:{deposit:30,port:0,receipt:70}},{id:'s2',name:'Fresh Supply US',contact:'Sarah Chen',email:'po@freshsupply.com',phone:'+1 310 555 0199',addr:'900 Warehouse Blvd, Los Angeles CA 90001',country:'USA',currency:'USD',payTerms:'30% deposit, 40% at port, 30% on receipt',bankName:'Chase Bank',bankAcct:'••••8832',notes:'Ships direct to Tidal Wave.',terms:{deposit:30,port:40,receipt:30}}];
 let nSup=3;
 const INV_FILES={};
 let POS=[];
-let nPO=5,lineCtx=200,pof={sup:'',fc:'',st:'',df:'',dt:'',prods:[]},aFC='tw',gMode='30',csFrom='',csTo='',tRev=50000,tDays=60,activeTab='po',modalPayments=[],lineIds=[];
+let nPO=1,lineCtx=200,pof={sup:'',fc:'',st:'',df:'',dt:'',prods:[]},aFC='tw',gMode='30',csFrom='',csTo='',tRev=50000,tDays=60,activeTab='po',modalPayments=[],lineIds=[];
+const STOCK={tw:{},vi:{}};
+const DAILY={tw:{},vi:{}};
+let shConnected=false,skConnected=false;
 const sup=id=>SUPPLIERS.find(s=>s.id===id)||{name:'Unknown',email:'',addr:'',terms:{deposit:30,port:0,receipt:70},currency:'AUD',payTerms:'',bankName:'',bankAcct:''};
 const fcn=id=>FCS.find(f=>f.id===id)||{name:'—',flag:''};
 const od=po=>po.status!=='Received'&&po.exp&&new Date(po.exp)<new Date(TODAY);
 const fm=n=>Math.round(n).toLocaleString();
 const fmtD=n=>n?new Date(n).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}):'—';
-const dv=(fc,p)=>{const s=STOCK[fc]?.[p]??0,d=DAILY[fc]?.[p]??1;return d>0?Math.floor(s/d):999};
-const bdg=d=>d<=7?`<span class="bdg bdn">${d}d critical</span>`:d<=14?`<span class="bdg bwn">${d}d low</span>`:d<=30?`<span class="bdg bwn">${d}d watch</span>`:`<span class="bdg bok">${d}d good</span>`;
-const cc=d=>d<=7?'cdn':d<=30?'cwn':'cok';
+const dv=(fc,p)=>{const s=STOCK[fc]?.[p]??0,d=DAILY[fc]?.[p]??0;return s>0&&d>0?Math.floor(s/d):s===0?null:999};
+const bdg=d=>d===null?'<span class="bdg bmu">—</span>':d<=7?`<span class="bdg bdn">${d}d critical</span>`:d<=14?`<span class="bdg bwn">${d}d low</span>`:d<=30?`<span class="bdg bwn">${d}d watch</span>`:`<span class="bdg bok">${d}d good</span>`;
+const cc=d=>d===null?'':d<=7?'cdn':d<=30?'cwn':'cok';
 const poTotal=po=>po.lines.reduce((s,l)=>s+l.o*(l.cost||0),0);
 const payOwed=po=>po.payments.filter(p=>p.status!=='Paid').reduce((s,p)=>s+p.amount,0);
 const overdueP=()=>POS.flatMap(po=>po.payments.filter(p=>p.status==='Overdue').map(p=>({...p,po})));
 const gapDays=()=>gMode==='custom'?(csFrom&&csTo?Math.max(1,Math.round((new Date(csTo)-new Date(csFrom))/864e5)):30):parseInt(gMode);
 const gapLbl=()=>gMode==='custom'&&csFrom&&csTo?`${csFrom} → ${csTo}`:gMode+'d';
 const inbound=()=>{const b={tw:{},vi:{}};POS.filter(p=>p.appr&&p.status!=='Received').forEach(po=>po.lines.forEach(l=>{b[po.fc][l.p]=(b[po.fc][l.p]||0)+(l.o-l.r)}));return b};
+
+function updateDsrc(){
+  if(shConnected&&skConnected){document.getElementById('sh-btn').textContent='● ShipHero';document.getElementById('sh-btn').style.color='var(--green)';document.getElementById('sk-btn').textContent='● Shopify';document.getElementById('sk-btn').style.color='var(--green)'}
+}
+
+async function syncShipHero(btn){
+  btn.textContent='⟳ ShipHero…';btn.disabled=true;
+  try{
+    const r=await fetch('/api/live/shiphero');
+    const d=await r.json();
+    if(!r.ok||d.error)throw new Error(d.error||'ShipHero error');
+    for(const[product,inv]of Object.entries(d.stock)){STOCK.tw[product]=inv.available}
+    shConnected=true;
+    btn.textContent='● ShipHero';btn.style.color='var(--green)';btn.disabled=false;
+    rActive();
+  }catch(e){
+    btn.textContent='✕ ShipHero';btn.style.color='var(--red)';btn.disabled=false;
+    setTimeout(()=>{btn.textContent='◯ ShipHero';btn.style.color='';shConnected=false},3000);
+    console.error('[ShipHero]',e.message);
+  }
+}
+
+async function syncShopify(btn){
+  btn.textContent='⟳ Shopify…';btn.disabled=true;
+  try{
+    const r=await fetch('/api/live/shopify');
+    const d=await r.json();
+    if(!r.ok||d.error)throw new Error(d.error||'Shopify error');
+    if(d.au_stock){for(const[product,qty]of Object.entries(d.au_stock)){STOCK.vi[product]=qty}}
+    if(d.velocity_us){if(!DAILY.tw)DAILY.tw={};for(const[product,vel]of Object.entries(d.velocity_us)){DAILY.tw[product]=vel}}
+    if(d.velocity_au){if(!DAILY.vi)DAILY.vi={};for(const[product,vel]of Object.entries(d.velocity_au)){DAILY.vi[product]=vel}}
+    skConnected=true;
+    btn.textContent='● Shopify';btn.style.color='var(--green)';btn.disabled=false;
+    rActive();
+  }catch(e){
+    btn.textContent='✕ Shopify';btn.style.color='var(--red)';btn.disabled=false;
+    setTimeout(()=>{btn.textContent='◯ Shopify';btn.style.color='';skConnected=false},3000);
+    console.error('[Shopify]',e.message);
+  }
+}
+
+document.getElementById('sh-btn').addEventListener('click',function(){
+  if(shConnected){shConnected=false;Object.keys(STOCK.tw).forEach(k=>delete STOCK.tw[k]);this.textContent='◯ ShipHero';this.style.color='';rActive();return}
+  syncShipHero(this);
+});
+document.getElementById('sk-btn').addEventListener('click',function(){
+  if(skConnected){skConnected=false;this.textContent='◯ Shopify';this.style.color='';rActive();return}
+  syncShopify(this);
+});
+
+window.addEventListener('load',()=>{
+  syncShopify(document.getElementById('sk-btn'));
+  syncShipHero(document.getElementById('sh-btn'));
+});
+
 function openM(html){const r=document.getElementById('mroot');r.innerHTML=`<div class="moverlay" id="mov">${html}</div>`;document.getElementById('mov').addEventListener('click',e=>{if(e.target.id==='mov')closeM()})}
 function closeM(){document.getElementById('mroot').innerHTML=''}
 function sPill(po){const s=SC[po.status]||{bg:'#eee',tc:'#333'};const opts=Object.entries(SC).map(([k,v])=>`<div class="sopt" style="background:${v.bg};color:${v.tc}" onclick="setSt(event,'${po.id}','${k}')">${k}</div>`).join('');return`<span class="spill" style="background:${s.bg};color:${s.tc}" onclick="togDrop(event,'${po.id}')">${po.status} ▾<span class="sdrop" id="sd-${po.id}">${opts}</span></span>`}
@@ -145,7 +200,7 @@ function selProd(e,title,sku){e.stopPropagation();const drop=e.target.closest('[
 function initPayments(s,total){const t=s.terms||{deposit:30,port:0,receipt:70};const pays=[];if(t.deposit>0)pays.push({id:'np'+Date.now(),type:'Deposit',pct:t.deposit,amount:+(total*t.deposit/100).toFixed(2),invNum:'',invDate:'',dueDate:'',paidDate:'',status:'Unpaid'});if(t.port>0)pays.push({id:'np'+(Date.now()+1),type:'At Port',pct:t.port,amount:+(total*t.port/100).toFixed(2),invNum:'',invDate:'',dueDate:'',paidDate:'',status:'Unpaid'});if(t.receipt>0)pays.push({id:'np'+(Date.now()+2),type:'On Receipt',pct:t.receipt,amount:+(total*t.receipt/100).toFixed(2),invNum:'',invDate:'',dueDate:'',paidDate:'',status:'Unpaid'});return pays}
 function calcLineTotal(){return lineIds.reduce((s,i)=>{const o=parseInt(document.getElementById('flo-'+i)?.value)||0;const c=parseFloat(document.getElementById('flc-'+i)?.value)||0;return s+o*c},0)}
 function recalcPay(){const total=calcLineTotal();modalPayments.forEach(p=>{p.amount=+(total*p.pct/100).toFixed(2)});const el=document.getElementById('pay-ms-form');if(el)el.innerHTML=msFormHtml()}
-function msFormHtml(){if(!modalPayments.length)return'<div class="sn">No milestones. Add one or select a supplier with payment terms.</div>';return modalPayments.map((p,i)=>`<div class="pay-ms" id="pm-${i}"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><select class="sf-sel" style="font-size:12px;padding:3px 8px" id="pm-t-${i}">${['Deposit','At Port','On Shipping','On Receipt','Other'].map(t=>`<option ${p.type===t?'selected':''}>${t}</option>`).join('')}</select><input class="form-in" type="number" style="width:52px;padding:3px 6px;font-size:12px" id="pm-p-${i}" value="${p.pct}" min="0" max="100" onchange="modalPayments[${i}].pct=+this.value;recalcPay()">%<span style="font-size:12px;font-weight:600">= $<span id="pm-a-${i}">${p.amount.toFixed(2)}</span></span></div><button style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--text2)" onclick="rmMs(${i})">✕</button></div><div class="frow3"><div><div class="form-lbl">Invoice no.</div><input class="form-in" id="pm-in-${i}" value="${p.invNum||''}" placeholder="INV-2026-001"></div><div><div class="form-lbl">Invoice date</div><input class="form-in" type="date" id="pm-id-${i}" value="${p.invDate||''}"></div><div><div class="form-lbl">Due date</div><input class="form-in" type="date" id="pm-dd-${i}" value="${p.dueDate||''}"></div></div><div class="frow"><div><div class="form-lbl">Date paid</div><input class="form-in" type="date" id="pm-pd-${i}" value="${p.paidDate||''}" onchange="if(this.value){document.getElementById('pm-s-${i}').value='Paid';modalPayments[${i}].status='Paid'}"></div><div><div class="form-lbl">Status</div><select class="form-sel" id="pm-s-${i}">${['Unpaid','Paid','Overdue'].map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></div></div><div><div class="form-lbl">Invoice file</div>${INV_FILES[p.id]?`<div class="inv-file"><span>📄 ${INV_FILES[p.id].name}</span><button class="btn bts" onclick="viewInv('${p.id}')">View</button><button class="btn bts" style="color:var(--red)" onclick="delInv('${p.id}')">Remove</button></div>`:`<div class="inv-upload" onclick="document.getElementById('inv-up-${i}').click()">📎 Click to attach invoice</div>`}<input type="file" id="inv-up-${i}" accept=".pdf,.png,.jpg,.jpeg" style="display:none" onchange="uploadInv(this,'${p.id}')"></div></div>`).join('')}
+function msFormHtml(){if(!modalPayments.length)return'<div class="sn">No milestones.</div>';return modalPayments.map((p,i)=>`<div class="pay-ms" id="pm-${i}"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><select class="sf-sel" style="font-size:12px;padding:3px 8px" id="pm-t-${i}">${['Deposit','At Port','On Shipping','On Receipt','Other'].map(t=>`<option ${p.type===t?'selected':''}>${t}</option>`).join('')}</select><input class="form-in" type="number" style="width:52px;padding:3px 6px;font-size:12px" id="pm-p-${i}" value="${p.pct}" min="0" max="100" onchange="modalPayments[${i}].pct=+this.value;recalcPay()">%<span style="font-size:12px;font-weight:600">= $<span id="pm-a-${i}">${p.amount.toFixed(2)}</span></span></div><button style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--text2)" onclick="rmMs(${i})">✕</button></div><div class="frow3"><div><div class="form-lbl">Invoice no.</div><input class="form-in" id="pm-in-${i}" value="${p.invNum||''}" placeholder="INV-2026-001"></div><div><div class="form-lbl">Invoice date</div><input class="form-in" type="date" id="pm-id-${i}" value="${p.invDate||''}"></div><div><div class="form-lbl">Due date</div><input class="form-in" type="date" id="pm-dd-${i}" value="${p.dueDate||''}"></div></div><div class="frow"><div><div class="form-lbl">Date paid</div><input class="form-in" type="date" id="pm-pd-${i}" value="${p.paidDate||''}" onchange="if(this.value){document.getElementById('pm-s-${i}').value='Paid';modalPayments[${i}].status='Paid'}"></div><div><div class="form-lbl">Status</div><select class="form-sel" id="pm-s-${i}">${['Unpaid','Paid','Overdue'].map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></div></div><div><div class="form-lbl">Invoice file</div>${INV_FILES[p.id]?`<div class="inv-file"><span>📄 ${INV_FILES[p.id].name}</span><button class="btn bts" onclick="viewInv('${p.id}')">View</button><button class="btn bts" style="color:var(--red)" onclick="delInv('${p.id}')">Remove</button></div>`:`<div class="inv-upload" onclick="document.getElementById('inv-up-${i}').click()">📎 Click to attach invoice</div>`}<input type="file" id="inv-up-${i}" accept=".pdf,.png,.jpg,.jpeg" style="display:none" onchange="uploadInv(this,'${p.id}')"></div></div>`).join('')}
 function uploadInv(input,payId){const file=input.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{INV_FILES[payId]={name:file.name,type:file.type,dataUrl:e.target.result};const el=document.getElementById('pay-ms-form');if(el)el.innerHTML=msFormHtml()};reader.readAsDataURL(file)}
 function delInv(payId){delete INV_FILES[payId];const el=document.getElementById('pay-ms-form');if(el)el.innerHTML=msFormHtml()}
 function viewInv(payId){const f=INV_FILES[payId];if(!f)return;if(f.type==='application/pdf'){const w=window.open('');w.document.write(`<iframe src="${f.dataUrl}" style="width:100%;height:100vh;border:none"></iframe>`)}else{const w=window.open('');w.document.write(`<img src="${f.dataUrl}" style="max-width:100%;display:block;margin:auto">`)}}
@@ -197,9 +252,9 @@ function confirmDeletePO(pid){
   openM(`<div class="mbox-sm"><h3 style="color:var(--red)">Delete ${po.id}?</h3>
     <div style="background:var(--redbg);border-radius:var(--radius);padding:14px;margin-bottom:14px">
       <div style="font-size:13px;font-weight:600;color:var(--red);margin-bottom:8px">This cannot be undone.</div>
-      <div style="font-size:12px;color:var(--red);line-height:1.6"><div>Supplier: <strong>${s.name}</strong></div><div>Status: <strong>${po.status}</strong></div><div>Lines: <strong>${po.lines.map(l=>l.o+'× '+l.p).join(', ')}</strong></div></div>
+      <div style="font-size:12px;color:var(--red);line-height:1.6"><div>Supplier: <strong>${s.name}</strong></div><div>Status: <strong>${po.status}</strong></div></div>
     </div>
-    ${hasPaid?`<div style="background:var(--warnbg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--warn);margin-bottom:14px">⚠ This PO has recorded payments. Deleting it will remove all payment history.</div>`:''}
+    ${hasPaid?`<div style="background:var(--warnbg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--warn);margin-bottom:14px">⚠ This PO has recorded payments.</div>`:''}
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn" onclick="closeM()">Cancel</button>
       <button style="font-size:13px;padding:7px 18px;border:none;border-radius:99px;background:var(--red);color:#fff;cursor:pointer;font-family:inherit;font-weight:600" onclick="deletePO('${pid}')">Yes, delete PO</button>
@@ -216,12 +271,11 @@ function openPayDetail(pid){
     </div>
     ${po.payments.map(p=>{const f=INV_FILES[p.id];return`<div class="pay-ms" style="${p.status==='Overdue'?'border-color:var(--red)':''}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px">
-        <div style="display:flex;align-items:center;gap:8px"><span style="font-size:13px;font-weight:600">${p.type}</span><span style="font-size:13px;font-weight:600">$${fm(p.amount)} <span style="font-size:11px;color:var(--text2)">(${p.pct}%)</span></span></div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="font-size:13px;font-weight:600">${p.type}</span><span style="font-size:13px;font-weight:600">$${fm(p.amount)}</span></div>
         <div style="display:flex;align-items:center;gap:6px"><span class="bdg ${p.status==='Paid'?'bok':p.status==='Overdue'?'bdn':'bmu'}">${p.status}</span>${p.status!=='Paid'?`<button class="btn bts" style="color:var(--green);border-color:var(--green)" onclick="markPaid('${pid}','${p.id}')">Mark paid</button>`:''}<button class="btn bts" onclick="editPayMs('${pid}','${p.id}')">Edit</button></div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:12px;margin-bottom:8px">
-        <div><span style="color:var(--text2)">Invoice:</span> ${p.invNum||'—'}</div><div><span style="color:var(--text2)">Inv. date:</span> ${fmtD(p.invDate)}</div><div><span style="color:var(--text2)">Due:</span> ${fmtD(p.dueDate)||'—'}</div>
-        ${p.paidDate?`<div><span style="color:var(--text2)">Paid:</span> <strong>${fmtD(p.paidDate)}</strong></div>`:''}
+        <div><span style="color:var(--text2)">Invoice:</span> ${p.invNum||'—'}</div><div><span style="color:var(--text2)">Due:</span> ${fmtD(p.dueDate)||'—'}</div>${p.paidDate?`<div><span style="color:var(--text2)">Paid:</span> <strong>${fmtD(p.paidDate)}</strong></div>`:''}
       </div>
       ${f?`<div class="inv-file"><span>📄 ${f.name}</span><button class="btn bts" onclick="viewInv('${p.id}')">View</button></div>`:`<label class="inv-upload" style="cursor:pointer;display:block">📎 Attach invoice<input type="file" accept=".pdf,.png,.jpg,.jpeg" style="display:none" onchange="uploadInvDirect(this,'${p.id}','${pid}')"></label>`}
     </div>`}).join('')}
@@ -231,16 +285,12 @@ function uploadInvDirect(input,payId,pid){const file=input.files[0];if(!file)ret
 function editPayMs(pid,payId){
   const po=POS.find(p=>p.id===pid);if(!po)return;const p=po.payments.find(x=>x.id===payId);if(!p)return;const f=INV_FILES[payId];
   openM(`<div class="mbox"><h3>Edit payment — ${p.type} on ${pid}</h3>
-    <div class="frow"><div><div class="form-lbl">Type</div><select class="form-sel" id="ep-t">${['Deposit','At Port','On Shipping','On Receipt','Other'].map(t=>`<option ${p.type===t?'selected':''}>${t}</option>`).join('')}</select></div><div><div class="form-lbl">Percentage</div><input class="form-in" type="number" id="ep-p" value="${p.pct}" min="0" max="100"></div></div>
-    <div class="frow"><div><div class="form-lbl">Amount ($)</div><input class="form-in" type="number" id="ep-a" value="${p.amount}" step="0.01"></div><div><div class="form-lbl">Status</div><select class="form-sel" id="ep-s">${['Unpaid','Paid','Overdue'].map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></div></div>
-    <div class="frow3"><div><div class="form-lbl">Invoice number</div><input class="form-in" id="ep-in" value="${p.invNum||''}" placeholder="INV-2026-001"></div><div><div class="form-lbl">Invoice date</div><input class="form-in" type="date" id="ep-id" value="${p.invDate||''}"></div><div><div class="form-lbl">Due date</div><input class="form-in" type="date" id="ep-dd" value="${p.dueDate||''}"></div></div>
-    <div class="frow1"><div class="form-lbl">Date paid</div><input class="form-in" type="date" id="ep-pd" value="${p.paidDate||''}"></div>
-    <div class="frow1"><div class="form-lbl">Invoice file</div>${f?`<div class="inv-file"><span>📄 ${f.name}</span><button class="btn bts" onclick="viewInv('${payId}')">View</button><button class="btn bts" style="color:var(--red)" onclick="delete INV_FILES['${payId}'];editPayMs('${pid}','${payId}')">Remove</button></div>`:''}
-    <label class="inv-upload" style="margin-top:${f?'8px':'0'};cursor:pointer;display:block">${f?'Replace file':'📎 Attach invoice (PDF or image)'}<input type="file" accept=".pdf,.png,.jpg,.jpeg" style="display:none" onchange="uploadInvEdit(this,'${payId}','${pid}')"></label></div>
+    <div class="frow"><div><div class="form-lbl">Type</div><select class="form-sel" id="ep-t">${['Deposit','At Port','On Shipping','On Receipt','Other'].map(t=>`<option ${p.type===t?'selected':''}>${t}</option>`).join('')}</select></div><div><div class="form-lbl">Amount ($)</div><input class="form-in" type="number" id="ep-a" value="${p.amount}" step="0.01"></div></div>
+    <div class="frow"><div><div class="form-lbl">Invoice number</div><input class="form-in" id="ep-in" value="${p.invNum||''}" placeholder="INV-2026-001"></div><div><div class="form-lbl">Due date</div><input class="form-in" type="date" id="ep-dd" value="${p.dueDate||''}"></div></div>
+    <div class="frow"><div><div class="form-lbl">Date paid</div><input class="form-in" type="date" id="ep-pd" value="${p.paidDate||''}"></div><div><div class="form-lbl">Status</div><select class="form-sel" id="ep-s">${['Unpaid','Paid','Overdue'].map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></div></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;padding-top:10px;border-top:0.5px solid var(--border)"><button class="btn" onclick="openPayDetail('${pid}')">Cancel</button><button class="btn btp" onclick="savePayMs('${pid}','${payId}')">Save changes</button></div></div>`);
 }
-function uploadInvEdit(input,payId,pid){const file=input.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{INV_FILES[payId]={name:file.name,type:file.type,dataUrl:e.target.result};editPayMs(pid,payId)};reader.readAsDataURL(file)}
-function savePayMs(pid,payId){const po=POS.find(p=>p.id===pid);if(!po)return;const p=po.payments.find(x=>x.id===payId);if(!p)return;p.type=document.getElementById('ep-t').value;p.pct=parseFloat(document.getElementById('ep-p').value)||p.pct;p.amount=parseFloat(document.getElementById('ep-a').value)||p.amount;p.status=document.getElementById('ep-s').value;p.invNum=document.getElementById('ep-in').value;p.invDate=document.getElementById('ep-id').value;p.dueDate=document.getElementById('ep-dd').value;p.paidDate=document.getElementById('ep-pd').value;openPayDetail(pid);rActive()}
+function savePayMs(pid,payId){const po=POS.find(p=>p.id===pid);if(!po)return;const p=po.payments.find(x=>x.id===payId);if(!p)return;p.type=document.getElementById('ep-t').value;p.amount=parseFloat(document.getElementById('ep-a').value)||p.amount;p.status=document.getElementById('ep-s').value;p.invNum=document.getElementById('ep-in').value;p.dueDate=document.getElementById('ep-dd').value;p.paidDate=document.getElementById('ep-pd').value;openPayDetail(pid);rActive()}
 function markPaid(pid,payId){const po=POS.find(p=>p.id===pid);if(!po)return;const p=po.payments.find(x=>x.id===payId);if(!p)return;p.status='Paid';p.paidDate=TODAY;openPayDetail(pid);rActive()}
 function sumT(t){const tot=(t?.deposit||0)+(t?.port||0)+(t?.receipt||0);const ok=tot===100;return`<span style="font-size:12px;font-weight:600;color:${ok?'var(--green)':'var(--red)'}">Total: ${tot}% ${ok?'✓':'— must equal 100%'}</span>`}
 function recalcT(){const t={deposit:+document.getElementById('st-d')?.value||0,port:+document.getElementById('st-p')?.value||0,receipt:+document.getElementById('st-r')?.value||0};const el=document.getElementById('terms-tot');if(el)el.innerHTML=sumT(t)}
@@ -264,56 +314,51 @@ function openSupplier(sid){
 }
 function saveSup(sid){const acct=document.getElementById('sb-a').value;const masked=acct.length>4?'••••'+acct.slice(-4):acct||'';const data={name:document.getElementById('sn').value,contact:document.getElementById('sc').value,email:document.getElementById('se').value,phone:document.getElementById('sp').value,addr:document.getElementById('sa').value,country:document.getElementById('sco').value,currency:document.getElementById('scu').value,payTerms:document.getElementById('st-desc').value,bankName:document.getElementById('sb-b').value,bankAcct:masked,notes:document.getElementById('sno').value,terms:{deposit:+document.getElementById('st-d').value||0,port:+document.getElementById('st-p').value||0,receipt:+document.getElementById('st-r').value||0}};if(sid){const idx=SUPPLIERS.findIndex(s=>s.id===sid);SUPPLIERS[idx]={...SUPPLIERS[idx],...data}}else{SUPPLIERS.push({id:'s'+nSup,...data});nSup++}closeM();rSuppliers()}
 function rOverview(){
-  const ib=inbound();const tot=ALL_TRACK.reduce((s,p)=>s+FCS.reduce((a,f)=>a+(STOCK[f.id]?.[p]??0),0),0);const val=ALL_TRACK.reduce((s,p)=>s+FCS.reduce((a,f)=>a+(STOCK[f.id]?.[p]??0),0)*(PRICES[p]??0),0);const allD=FCS.flatMap(f=>ALL_TRACK.map(p=>dv(f.id,p)));const avgD=Math.round(allD.reduce((a,b)=>a+b,0)/allD.length);const ovdP=overdueP();const totalOwed=POS.reduce((s,po)=>s+payOwed(po),0);const vel=ALL_TRACK.map(p=>({p,d:FCS.reduce((s,f)=>s+(DAILY[f.id]?.[p]??0),0)})).sort((a,b)=>b.d-a.d);const alerts=FCS.flatMap(f=>ALL_TRACK.map(p=>({f,p,d:dv(f.id,p)}))).filter(a=>a.d<=30).sort((a,b)=>a.d-b.d);
+  const ib=inbound();const tot=ALL_TRACK.reduce((s,p)=>s+FCS.reduce((a,f)=>a+(STOCK[f.id]?.[p]??0),0),0);const val=ALL_TRACK.reduce((s,p)=>s+FCS.reduce((a,f)=>a+(STOCK[f.id]?.[p]??0),0)*(PRICES[p]??0),0);const allD=FCS.flatMap(f=>ALL_TRACK.map(p=>dv(f.id,p))).filter(d=>d!==null);const avgD=allD.length?Math.round(allD.reduce((a,b)=>a+b,0)/allD.length):0;const totalOwed=POS.reduce((s,po)=>s+payOwed(po),0);const ovdP=overdueP();const vel=ALL_TRACK.map(p=>({p,dUS:DAILY.tw?.[p]??0,dAU:DAILY.vi?.[p]??0})).sort((a,b)=>(b.dUS+b.dAU)-(a.dUS+a.dAU));const alerts=FCS.flatMap(f=>ALL_TRACK.map(p=>({f,p,d:dv(f.id,p)}))).filter(a=>a.d!==null&&a.d<=30).sort((a,b)=>a.d-b.d);
   document.getElementById('tab-overview').innerHTML=`
-    <div class="g4"><div class="mc"><div class="ml">Total units</div><div class="mv">${fm(tot)}</div><div class="ms">All FCs · ${ALL_TRACK.length} products</div></div><div class="mc"><div class="ml">Est. stock value</div><div class="mv">$${fm(val)}</div></div><div class="mc"><div class="ml">Avg days coverage</div><div class="mv" style="${avgD<=14?'color:var(--red)':avgD<=30?'color:var(--warn)':''}">${avgD}d</div></div><div class="mc"><div class="ml">Payments owed</div><div class="mv" style="${totalOwed?'color:var(--warn)':''}">$${fm(totalOwed)}</div><div class="ms">${ovdP.length} overdue</div></div></div>
+    <div class="g4"><div class="mc"><div class="ml">Total units</div><div class="mv">${fm(tot)}</div><div class="ms">All FCs · ${ALL_TRACK.length} products</div></div><div class="mc"><div class="ml">Est. stock value</div><div class="mv">$${fm(val)}</div></div><div class="mc"><div class="ml">Avg days coverage</div><div class="mv" style="${avgD<=14?'color:var(--red)':avgD<=30?'color:var(--warn)':''}">${avgD?avgD+'d':'—'}</div></div><div class="mc"><div class="ml">Payments owed</div><div class="mv" style="${totalOwed?'color:var(--warn)':''}">$${fm(totalOwed)}</div><div class="ms">${ovdP.length} overdue</div></div></div>
     <div class="g2">
-      <div class="card"><div class="ct">Stock alerts ≤30d</div>${alerts.length?alerts.slice(0,7).map(a=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:0.5px solid var(--border)"><span style="font-size:13px;font-weight:600">${a.f.flag} ${a.f.name} — ${a.p}</span>${bdg(a.d)}</div>`).join(''):'<div class="sn">All products 30d+ covered.</div>'}</div>
-      <div class="card"><div class="ct">Sales velocity</div><table class="sf-t"><thead><tr><th>Product</th><th>Type</th><th style="text-align:right">Daily</th><th style="text-align:right">Mo. rev.</th></tr></thead><tbody>${vel.map(v=>`<tr><td style="font-weight:600">${v.p}</td><td>${GIFT_P.includes(v.p)?'<span class="bdg bin">gift</span>':'<span class="bdg bmu">core</span>'}</td><td style="text-align:right">${v.d}/d</td><td style="text-align:right">$${fm(v.d*30*(PRICES[v.p]??0))}</td></tr>`).join('')}</tbody></table></div>
+      <div class="card"><div class="ct">Stock alerts ≤30d</div>${alerts.length?alerts.slice(0,7).map(a=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:0.5px solid var(--border)"><span style="font-size:13px;font-weight:600">${a.f.flag} ${a.f.name} — ${a.p}</span>${bdg(a.d)}</div>`).join(''):'<div class="sn">All products 30d+ covered or no stock data yet.</div>'}</div>
+      <div class="card"><div class="ct">Sales velocity <span class="bdg bmu">7d avg</span></div><table class="sf-t"><thead><tr><th>Product</th><th>Type</th><th style="text-align:right">🇺🇸 US/d</th><th style="text-align:right">🇦🇺 AU/d</th><th style="text-align:right">Total/d</th></tr></thead><tbody>${vel.map(v=>`<tr><td style="font-weight:600">${v.p}</td><td>${GIFT_P.includes(v.p)?'<span class="bdg bin">gift</span>':'<span class="bdg bmu">core</span>'}</td><td style="text-align:right">${v.dUS}/d</td><td style="text-align:right">${v.dAU}/d</td><td style="text-align:right;font-weight:600">${+(v.dUS+v.dAU).toFixed(1)}/d</td></tr>`).join('')}</tbody></table></div>
     </div>
     ${ovdP.length?`<div class="card" style="border-color:var(--red)"><div class="ct">Overdue payments <span class="bdg bdn">${ovdP.length}</span></div>${ovdP.map(p=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border)"><div><div style="font-size:13px;font-weight:600">${p.po.id} — ${p.type}</div><div style="font-size:12px;color:var(--text2)">${sup(p.po.supId).name} · Due ${fmtD(p.dueDate)}</div></div><div style="text-align:right"><span class="bdg bdn">Overdue</span><div style="font-size:12px;font-weight:600;margin-top:2px">$${fm(p.amount)}</div></div></div>`).join('')}</div>`:''}`;
 }
 function rInventory(){
   const ib=inbound();const fc=FCS.find(f=>f.id===aFC);
-  // Stock logic:
-  // Tidal Wave (tw) = ShipHero live data per SKU
-  // Internal WH (vi) = Shopify global total MINUS ShipHero US stock = AU warehouse stock
-const displayStock=(fcId,p)=>STOCK[fcId]?.[p]??0;
+  const isLive=aFC==='tw'?shConnected:skConnected;
   document.getElementById('tab-inventory').innerHTML=`
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap" id="fctabs">${FCS.map(f=>`<button class="fct${f.id===aFC?' active':''}" data-f="${f.id}">${f.flag} ${f.name}</button>`).join('')}</div>
-    ${aFC==='vi'&&STOCK.shopify?`<div style="background:var(--bluebg);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--blue)">📊 Victoria stock = Shopify global total − ShipHero US stock. This reflects what's physically in your AU warehouse.</div>`:''}
-    ${aFC==='tw'&&!shConnected?`<div style="background:var(--warnbg);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--warn)">⚠ Connect ShipHero (top right) to see live Tidal Wave stock counts.</div>`:''}
-    <div class="card"><div class="ct">${fc.flag} ${fc.name} — ${fc.loc}${aFC==='tw'?`<span class="bdg ${shConnected?'bok':'bmu'}">${shConnected?'ShipHero live':'demo data'}</span>`:`<span class="bdg ${STOCK.shopify?'bok':'bmu'}">${STOCK.shopify?'Shopify − ShipHero':'demo data'}</span>`}</div>
+    ${!isLive?`<div style="background:var(--warnbg);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--warn)">⚠ ${aFC==='tw'?'ShipHero not connected — Tidal Wave showing no data.':'Shopify not connected — Internal WH showing no data.'}</div>`:''}
+    <div class="card"><div class="ct">${fc.flag} ${fc.name} — ${fc.loc}<span class="bdg ${isLive?'bok':'bmu'}">${isLive?(aFC==='tw'?'ShipHero live':'Shopify live'):'not connected'}</span></div>
     <table class="sf-t"><thead><tr><th>Product</th><th>Type</th><th style="text-align:right">In stock</th><th style="text-align:right">Inbound (POs)</th><th style="text-align:right">Total avail.</th><th style="text-align:right">Daily</th><th style="text-align:right">Days left</th><th style="text-align:right">Status</th></tr></thead><tbody>
-    ${CORE_P.map(p=>{const s=displayStock(aFC,p),b=ib[aFC]?.[p]??0,dl=DAILY[aFC]?.[p]??0,d=s>0&&dl>0?Math.floor(s/dl):999;return`<tr><td style="font-weight:600">${p}</td><td><span class="bdg bmu">core</span></td><td style="text-align:right">${fm(s)}</td><td style="text-align:right;color:var(--blue)">${b?'+'+fm(b):'—'}</td><td style="text-align:right;font-weight:600">${fm(s+b)}</td><td style="text-align:right">${dl}/d</td><td style="text-align:right;font-weight:600">${d===999?'—':d+'d'}</td><td style="text-align:right">${bdg(d)}</td></tr>`}).join('')}
+    ${CORE_P.map(p=>{const s=STOCK[aFC]?.[p]??0,b=ib[aFC]?.[p]??0,dl=DAILY[aFC]?.[p]??0,d=dv(aFC,p);return`<tr><td style="font-weight:600">${p}</td><td><span class="bdg bmu">core</span></td><td style="text-align:right">${fm(s)}</td><td style="text-align:right;color:var(--blue)">${b?'+'+fm(b):'—'}</td><td style="text-align:right;font-weight:600">${fm(s+b)}</td><td style="text-align:right">${dl?dl+'/d':'—'}</td><td style="text-align:right;font-weight:600">${d===null?'—':d+'d'}</td><td style="text-align:right">${bdg(d)}</td></tr>`}).join('')}
     <tr><td colspan="8" style="font-size:11px;font-weight:700;color:var(--text2);background:var(--bg2);padding:4px 8px;letter-spacing:.04em">FREE GIFTS / ADD-ONS</td></tr>
-    ${GIFT_P.map(p=>{const s=displayStock(aFC,p),b=ib[aFC]?.[p]??0,dl=DAILY[aFC]?.[p]??0,d=s>0&&dl>0?Math.floor(s/dl):999;return`<tr><td style="font-weight:600">${p}</td><td><span class="bdg bin">gift</span></td><td style="text-align:right">${fm(s)}</td><td style="text-align:right;color:var(--blue)">${b?'+'+fm(b):'—'}</td><td style="text-align:right;font-weight:600">${fm(s+b)}</td><td style="text-align:right">${dl}/d</td><td style="text-align:right;font-weight:600">${d===999?'—':d+'d'}</td><td style="text-align:right">${bdg(d)}</td></tr>`}).join('')}
+    ${GIFT_P.map(p=>{const s=STOCK[aFC]?.[p]??0,b=ib[aFC]?.[p]??0,dl=DAILY[aFC]?.[p]??0,d=dv(aFC,p);return`<tr><td style="font-weight:600">${p}</td><td><span class="bdg bin">gift</span></td><td style="text-align:right">${fm(s)}</td><td style="text-align:right;color:var(--blue)">${b?'+'+fm(b):'—'}</td><td style="text-align:right;font-weight:600">${fm(s+b)}</td><td style="text-align:right">${dl?dl+'/d':'—'}</td><td style="text-align:right;font-weight:600">${d===null?'—':d+'d'}</td><td style="text-align:right">${bdg(d)}</td></tr>`}).join('')}
     </tbody></table></div>`;
   document.querySelectorAll('#fctabs .fct').forEach(b=>b.addEventListener('click',()=>{aFC=b.dataset.f;rInventory()}));
 }
 function rBundles(){
   const ib=inbound();
-  document.getElementById('tab-bundles').innerHTML=`<div class="sn">Bundle sales auto-deduct each component. Inbound includes approved POs not yet received.</div>
+  document.getElementById('tab-bundles').innerHTML=`<div class="sn">Bundle fulfillability based on current stock per FC.</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px">
-    ${BUNDLES.map(b=>{const comps=Object.entries(b.c).map(([p,q])=>`${q}× ${p}`).join(', ');return`<div class="card" style="margin:0"><div style="font-size:13px;font-weight:600;margin-bottom:2px">${b.n}</div><div style="font-size:11px;color:var(--text2);margin-bottom:4px">SKU: ${b.sku}</div><div style="font-size:20px;font-weight:600;margin-bottom:8px">$${b.p.toFixed(2)}</div><div style="font-size:12px;color:var(--text2);margin-bottom:10px">Components: ${comps}</div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px;letter-spacing:.04em">FULFILLABLE PER FC</div>${FCS.map(f=>{const qty=Math.min(...Object.entries(b.c).map(([p,q])=>Math.floor((STOCK[f.id]?.[p]??0)/q)));const qtyI=Math.min(...Object.entries(b.c).map(([p,q])=>Math.floor(((STOCK[f.id]?.[p]??0)+(ib[f.id]?.[p]??0))/q)));const mD=Math.min(...Object.keys(b.c).map(p=>dv(f.id,p)));return`<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:6px 0;border-top:0.5px solid var(--border)"><span>${f.flag} ${f.name}</span><div style="display:flex;align-items:center;gap:5px"><span style="font-weight:600">${qty}</span><span style="color:var(--text2);font-size:11px">+${qtyI-qty} inb.</span>${bdg(mD)}</div></div>`}).join('')}</div>`}).join('')}</div>`;
+    ${BUNDLES.map(b=>{const comps=Object.entries(b.c).map(([p,q])=>`${q}× ${p}`).join(', ');return`<div class="card" style="margin:0"><div style="font-size:13px;font-weight:600;margin-bottom:2px">${b.n}</div><div style="font-size:11px;color:var(--text2);margin-bottom:4px">SKU: ${b.sku}</div><div style="font-size:20px;font-weight:600;margin-bottom:8px">$${b.p.toFixed(2)}</div><div style="font-size:12px;color:var(--text2);margin-bottom:10px">Components: ${comps}</div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px;letter-spacing:.04em">FULFILLABLE PER FC</div>${FCS.map(f=>{const qty=Math.min(...Object.entries(b.c).map(([p,q])=>Math.floor((STOCK[f.id]?.[p]??0)/q)));const qtyI=Math.min(...Object.entries(b.c).map(([p,q])=>Math.floor(((STOCK[f.id]?.[p]??0)+(ib[f.id]?.[p]??0))/q)));const mD=Math.min(...Object.keys(b.c).map(p=>dv(f.id,p)||999));return`<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:6px 0;border-top:0.5px solid var(--border)"><span>${f.flag} ${f.name}</span><div style="display:flex;align-items:center;gap:5px"><span style="font-weight:600">${qty}</span><span style="color:var(--text2);font-size:11px">+${qtyI-qty} inb.</span>${bdg(mD===999?null:mD)}</div></div>`}).join('')}</div>`}).join('')}</div>`;
 }
 function rForecast(){
   const gd=gapDays();const ib=inbound();
   document.getElementById('tab-forecast').innerHTML=`
     <div style="display:flex;align-items:flex-end;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-      <div><div class="fl" style="margin-bottom:4px">Gap to fill window</div><select class="sf-sel" id="gsel"><option value="30" ${gMode==='30'?'selected':''}>30 days</option><option value="60" ${gMode==='60'?'selected':''}>60 days</option><option value="90" ${gMode==='90'?'selected':''}>90 days</option><option value="120" ${gMode==='120'?'selected':''}>120 days</option><option value="custom" ${gMode==='custom'?'selected':''}>Custom date range…</option></select></div>
-      <div id="cdw" style="display:${gMode==='custom'?'flex':'none'};gap:8px;align-items:flex-end;flex-wrap:wrap;border-left:2px solid var(--border2);padding-left:12px"><div><div class="fl" style="margin-bottom:3px">From</div><input type="date" class="fi" id="gfrom" value="${csFrom}" min="${TODAY}" style="width:140px"></div><div><div class="fl" style="margin-bottom:3px">To</div><input type="date" class="fi" id="gto" value="${csTo}" min="${TODAY}" style="width:140px"></div>${csFrom&&csTo?`<span class="bdg bmu">${gd} days</span>`:'<span style="font-size:12px;color:var(--text2)">Pick both dates</span>'}</div>
-      ${gMode!=='custom'?`<span class="bdg bmu">${gapLbl()}</span>`:''}
+      <div><div class="fl" style="margin-bottom:4px">Gap to fill window</div><select class="sf-sel" id="gsel"><option value="30" ${gMode==='30'?'selected':''}>30 days</option><option value="60" ${gMode==='60'?'selected':''}>60 days</option><option value="90" ${gMode==='90'?'selected':''}>90 days</option><option value="120" ${gMode==='120'?'selected':''}>120 days</option><option value="custom" ${gMode==='custom'?'selected':''}>Custom…</option></select></div>
+      <div id="cdw" style="display:${gMode==='custom'?'flex':'none'};gap:8px;align-items:flex-end;flex-wrap:wrap"><div><div class="fl" style="margin-bottom:3px">From</div><input type="date" class="fi" id="gfrom" value="${csFrom}" style="width:140px"></div><div><div class="fl" style="margin-bottom:3px">To</div><input type="date" class="fi" id="gto" value="${csTo}" style="width:140px"></div></div>
+      <span class="bdg bmu">${gapLbl()}</span>
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap"><span class="bdg bdn">≤7d critical</span><span class="bdg bwn">8–30d monitor</span><span class="bdg bok">30d+ healthy</span></div>
     <div style="display:grid;grid-template-columns:150px repeat(2,1fr);gap:8px;margin-bottom:4px"><div></div>${FCS.map(f=>`<div style="font-size:11px;font-weight:700;color:var(--text2);text-align:center">${f.flag} ${f.name}</div>`).join('')}</div>
     <div style="font-size:11px;font-weight:700;color:var(--text2);padding:4px 0;margin-bottom:6px;border-top:0.5px solid var(--border);letter-spacing:.04em">CORE PRODUCTS</div>
-    ${CORE_P.map(p=>`<div style="display:grid;grid-template-columns:150px repeat(2,1fr);gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:13px;font-weight:600">${p}</div>${FCS.map(f=>{const d=dv(f.id,p);return`<div class="fc-cell ${cc(d)}"><div class="fc-days">${d}</div><div class="fc-lbl">days</div></div>`}).join('')}</div>`).join('')}
+    ${CORE_P.map(p=>`<div style="display:grid;grid-template-columns:150px repeat(2,1fr);gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:13px;font-weight:600">${p}</div>${FCS.map(f=>{const d=dv(f.id,p);return`<div class="fc-cell ${d===null?'':cc(d)}"><div class="fc-days">${d===null?'—':d}</div><div class="fc-lbl">days</div></div>`}).join('')}</div>`).join('')}
     <div style="font-size:11px;font-weight:700;color:var(--text2);padding:4px 0;margin:6px 0;border-top:0.5px dashed var(--border2);letter-spacing:.04em">FREE GIFTS / ADD-ONS</div>
-    ${GIFT_P.map(p=>`<div style="display:grid;grid-template-columns:150px repeat(2,1fr);gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:13px;font-weight:600">${p}</div>${FCS.map(f=>{const d=dv(f.id,p);return`<div class="fc-cell ${cc(d)}"><div class="fc-days">${d}</div><div class="fc-lbl">days</div></div>`}).join('')}</div>`).join('')}
-    <div class="card" style="margin-top:16px"><div class="ct">Gap to fill — ${gapLbl()} <span class="bdg bmu">${gd}d window</span></div>
+    ${GIFT_P.map(p=>`<div style="display:grid;grid-template-columns:150px repeat(2,1fr);gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:13px;font-weight:600">${p}</div>${FCS.map(f=>{const d=dv(f.id,p);return`<div class="fc-cell ${d===null?'':cc(d)}"><div class="fc-days">${d===null?'—':d}</div><div class="fc-lbl">days</div></div>`}).join('')}</div>`).join('')}
+    <div class="card" style="margin-top:16px"><div class="ct">Gap to fill — ${gapLbl()}</div>
       <table class="sf-t"><thead><tr><th>FC</th><th>Product</th><th>Type</th><th style="text-align:right">Days left</th><th style="text-align:right">Need</th><th style="text-align:right">Stock</th><th style="text-align:right">Inbound</th><th style="text-align:right">Gap</th></tr></thead><tbody>
-      ${FCS.flatMap(f=>ALL_TRACK.map(p=>{const d=dv(f.id,p),dl=DAILY[f.id]?.[p]??0,need=dl*gd,cur=STOCK[f.id]?.[p]??0,inb=ib[f.id]?.[p]??0,gap=Math.max(0,need-cur-inb);return{f,p,d,need,cur,inb,gap,gift:GIFT_P.includes(p)}})).sort((a,b)=>a.d-b.d).map(r=>`<tr><td>${r.f.flag} ${r.f.name}</td><td style="font-weight:600">${r.p}</td><td><span class="bdg ${r.gift?'bin':'bmu'}">${r.gift?'gift':'core'}</span></td><td style="text-align:right">${bdg(r.d)}</td><td style="text-align:right">${r.need}</td><td style="text-align:right">${r.cur}</td><td style="text-align:right;color:var(--blue)">${r.inb?'+'+fm(r.inb):'—'}</td><td style="text-align:right;font-weight:600;${r.gap?'color:var(--red)':''}">${r.gap?'+'+fm(r.gap):'✓'}</td></tr>`).join('')}
+      ${FCS.flatMap(f=>ALL_TRACK.map(p=>{const d=dv(f.id,p),dl=DAILY[f.id]?.[p]??0,need=Math.ceil(dl*gd),cur=STOCK[f.id]?.[p]??0,inb=ib[f.id]?.[p]??0,gap=Math.max(0,need-cur-inb);return{f,p,d,need,cur,inb,gap,gift:GIFT_P.includes(p)}})).filter(r=>r.dl!==0||r.cur>0).sort((a,b)=>(a.d||999)-(b.d||999)).map(r=>`<tr><td>${r.f.flag} ${r.f.name}</td><td style="font-weight:600">${r.p}</td><td><span class="bdg ${r.gift?'bin':'bmu'}">${r.gift?'gift':'core'}</span></td><td style="text-align:right">${bdg(r.d)}</td><td style="text-align:right">${r.need||'—'}</td><td style="text-align:right">${r.cur}</td><td style="text-align:right;color:var(--blue)">${r.inb?'+'+fm(r.inb):'—'}</td><td style="text-align:right;font-weight:600;${r.gap?'color:var(--red)':''}">${r.gap?'+'+fm(r.gap):'✓'}</td></tr>`).join('')}
       </tbody></table></div>`;
   document.getElementById('gsel').addEventListener('change',e=>{gMode=e.target.value;document.getElementById('cdw').style.display=gMode==='custom'?'flex':'none';rForecast()});
   const gf=document.getElementById('gfrom'),gt=document.getElementById('gto');
@@ -321,9 +366,12 @@ function rForecast(){
   if(gt)gt.addEventListener('change',e=>{csTo=e.target.value;if(csFrom&&csTo)rForecast()});
 }
 function uReorder(){
-  const totD=CORE_P.reduce((s,p)=>s+FCS.reduce((a,f)=>a+(DAILY[f.id]?.[p]??0),0)*(PRICES[p]??0),0);const sc=totD>0?(tRev/tDays)/totD:1;const rows=CORE_P.map(p=>{const cd=FCS.reduce((s,f)=>s+(DAILY[f.id]?.[p]??0),0),nd=Math.ceil(cd*sc*tDays),cr=FCS.reduce((s,f)=>s+(STOCK[f.id]?.[p]??0),0),tb=Math.max(0,nd-cr),cg=tb*(PRICES[p]??0)*0.35;return{p,nd,cr,tb,cg}});const el=document.getElementById('rr');if(!el)return;
-  el.innerHTML=`<div class="g4" style="margin-bottom:14px"><div class="mc"><div class="ml">Current daily rev</div><div class="mv">$${fm(totD)}</div></div><div class="mc"><div class="ml">Target daily</div><div class="mv">$${fm(tRev/tDays)}</div></div><div class="mc"><div class="ml">Velocity needed</div><div class="mv">${sc.toFixed(1)}×</div></div><div class="mc"><div class="ml">Est. COGS to order</div><div class="mv">$${fm(rows.reduce((s,r)=>s+r.cg,0))}</div><div class="ms">At 35% COGS</div></div></div>
-  <div class="card"><table class="sf-t"><thead><tr><th>Product</th><th style="text-align:right">Current stock</th><th style="text-align:right">Needed</th><th style="text-align:right">To buy</th><th style="text-align:right">Est. COGS</th></tr></thead><tbody>${rows.map(r=>`<tr><td style="font-weight:600">${r.p}</td><td style="text-align:right">${fm(r.cr)}</td><td style="text-align:right">${fm(r.nd)}</td><td style="text-align:right;font-weight:600;${r.tb?'color:var(--blue)':''}">${r.tb?'+'+fm(r.tb):'✓ sufficient'}</td><td style="text-align:right">${r.tb?'$'+fm(r.cg):'—'}</td></tr>`).join('')}</tbody></table></div>`;
+  const totD=CORE_P.reduce((s,p)=>s+(DAILY.tw?.[p]??0)+(DAILY.vi?.[p]??0),0)*(Object.values(PRICES).reduce((a,b)=>a+b,0)/Object.values(PRICES).length||30);
+  const rows=CORE_P.map(p=>{const dlUS=DAILY.tw?.[p]??0,dlAU=DAILY.vi?.[p]??0,dlTot=dlUS+dlAU;const nd=Math.ceil(dlTot*tDays);const crUS=STOCK.tw?.[p]??0,crAU=STOCK.vi?.[p]??0,crTot=crUS+crAU;const tb=Math.max(0,nd-crTot);const cg=tb*(PRICES[p]??0)*0.35;return{p,dlTot,nd,crTot,crUS,crAU,tb,cg}});
+  const el=document.getElementById('rr');if(!el)return;
+  const totalCogs=rows.reduce((s,r)=>s+r.cg,0);
+  el.innerHTML=`<div class="g4" style="margin-bottom:14px"><div class="mc"><div class="ml">Target revenue</div><div class="mv">$${fm(tRev)}</div></div><div class="mc"><div class="ml">Over days</div><div class="mv">${tDays}d</div></div><div class="mc"><div class="ml">Daily velocity (total)</div><div class="mv">${rows.reduce((s,r)=>s+r.dlTot,0).toFixed(0)} units</div></div><div class="mc"><div class="ml">Est. COGS to order</div><div class="mv">$${fm(totalCogs)}</div><div class="ms">At 35% COGS</div></div></div>
+  <div class="card"><table class="sf-t"><thead><tr><th>Product</th><th style="text-align:right">US stock</th><th style="text-align:right">AU stock</th><th style="text-align:right">Total stock</th><th style="text-align:right">US daily</th><th style="text-align:right">AU daily</th><th style="text-align:right">Needed (${tDays}d)</th><th style="text-align:right">To buy</th><th style="text-align:right">Est. COGS</th></tr></thead><tbody>${rows.map(r=>`<tr><td style="font-weight:600">${r.p}</td><td style="text-align:right">${fm(r.crUS)}</td><td style="text-align:right">${fm(r.crAU)}</td><td style="text-align:right">${fm(r.crTot)}</td><td style="text-align:right">${r.dlTot>0?(DAILY.tw?.[r.p]??0)+'/d':'—'}</td><td style="text-align:right">${r.dlTot>0?(DAILY.vi?.[r.p]??0)+'/d':'—'}</td><td style="text-align:right">${r.nd||'—'}</td><td style="text-align:right;font-weight:600;${r.tb?'color:var(--blue)':''}">${r.tb?'+'+fm(r.tb):'✓'}</td><td style="text-align:right">${r.tb?'$'+fm(r.cg):'—'}</td></tr>`).join('')}</tbody></table></div>`;
 }
 function rReorder(){document.getElementById('tab-reorder').innerHTML=`<div class="card" style="margin-bottom:14px"><div class="ct">Revenue target</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:20px"><div><div style="font-size:13px;color:var(--text2);margin-bottom:6px">Target revenue ($)</div><input class="ri" type="number" id="trv" value="${tRev}" min="1000" step="1000"></div><div><div style="font-size:13px;color:var(--text2);margin-bottom:6px">Over how many days</div><input class="ri" type="number" id="tdy" value="${tDays}" min="7" step="7"></div></div></div><div id="rr"></div>`;uReorder();document.getElementById('trv').addEventListener('input',e=>{tRev=parseInt(e.target.value)||50000;uReorder()});document.getElementById('tdy').addEventListener('input',e=>{tDays=parseInt(e.target.value)||60;uReorder()})}
 function rPO(){
@@ -333,7 +381,7 @@ function rPO(){
   const anyF=pof.sup||pof.fc||pof.st||pof.df||pof.dt||pof.prods.length;
   document.getElementById('tab-po').innerHTML=`
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-      <div class="g4" style="margin:0;flex:1"><div class="mc"><div class="ml">Open</div><div class="mv">${POS.filter(p=>p.status!=='Received').length}</div></div><div class="mc"><div class="ml">Overdue POs</div><div class="mv" style="${POS.filter(p=>od(p)).length?'color:var(--red)':''}">${POS.filter(p=>od(p)).length}</div></div><div class="mc"><div class="ml">Overdue payments</div><div class="mv" style="${overdueP().length?'color:var(--red)':''}">${overdueP().length}</div></div><div class="mc"><div class="ml">Total owed</div><div class="mv" style="${POS.reduce((s,po)=>s+payOwed(po),0)?'color:var(--warn)':''}">$${fm(POS.reduce((s,po)=>s+payOwed(po),0))}</div></div></div>
+      <div class="g4" style="margin:0;flex:1"><div class="mc"><div class="ml">Open POs</div><div class="mv">${POS.filter(p=>p.status!=='Received').length}</div></div><div class="mc"><div class="ml">Overdue POs</div><div class="mv" style="${POS.filter(p=>od(p)).length?'color:var(--red)':''}">${POS.filter(p=>od(p)).length}</div></div><div class="mc"><div class="ml">Overdue payments</div><div class="mv" style="${overdueP().length?'color:var(--red)':''}">${overdueP().length}</div></div><div class="mc"><div class="ml">Total owed</div><div class="mv" style="${POS.reduce((s,po)=>s+payOwed(po),0)?'color:var(--warn)':''}">$${fm(POS.reduce((s,po)=>s+payOwed(po),0))}</div></div></div>
       <button class="btn btp" onclick="openPO(null)" style="white-space:nowrap;margin-top:4px">+ New PO</button>
     </div>
     <div class="fbar">
@@ -342,35 +390,34 @@ function rPO(){
       <div class="fg"><div class="fl">Status</div><select class="fi" onchange="pof.st=this.value;rPO()"><option value="">All</option>${Object.keys(SC).map(s=>`<option ${pof.st===s?'selected':''}>${s}</option>`).join('')}</select></div>
       <div class="fg"><div class="fl">Exp. from</div><input type="date" class="fi" value="${pof.df}" onchange="pof.df=this.value;rPO()"></div>
       <div class="fg"><div class="fl">Exp. to</div><input type="date" class="fi" value="${pof.dt}" onchange="pof.dt=this.value;rPO()"></div>
-      <div class="fg" style="min-width:130px"><div class="fl">Products</div><select class="fi" multiple size="2" style="height:44px" onchange="pof.prods=[...this.selectedOptions].map(o=>o.value);rPO()">${prods.map(p=>`<option ${pof.prods.includes(p)?'selected':''}>${p}</option>`).join('')}</select></div>
       ${anyF?`<button class="btn bts" onclick="pof={sup:'',fc:'',st:'',df:'',dt:'',prods:[]};rPO()">✕ Clear</button>`:''}
     </div>
     <div class="card">
-      <div class="ct">Active POs ${anyF?`<span class="bdg bin">${act.length} shown</span>`:''}<span style="font-size:11px;color:var(--text2)">Click status badge to change</span></div>
+      <div class="ct">Active POs ${anyF?`<span class="bdg bin">${act.length} shown</span>`:''}</div>
       <table class="sf-t"><thead><tr><th>PO</th><th>Supplier</th><th>FC</th><th>Status</th><th>Expected</th><th>Products</th><th>Payments</th><th></th></tr></thead><tbody>
-      ${act.length?act.map(po=>{const s=sup(po.supId);const paidC=po.payments.filter(p=>p.status==='Paid').length;const ovdC=po.payments.filter(p=>p.status==='Overdue').length;return`<tr><td style="font-weight:600">${po.id}</td><td><div style="font-weight:600">${s.name}</div><div style="font-size:11px;color:var(--text2)">${s.currency}</div></td><td>${fcn(po.fc).flag} ${fcn(po.fc).name}</td><td><div style="position:relative;display:inline-block">${sPill(po)}</div><div class="prog-w"><div class="prog-b" style="width:${SC[po.status]?.pr??0}%"></div></div></td><td>${od(po)?`<span class="ov">⚠ Overdue<br></span>`:''}<span style="font-size:12px">${po.exp||'—'}</span></td><td style="font-size:12px">${po.lines.slice(0,2).map(l=>`<div>${l.o}× ${l.p}</div>`).join('')}${po.lines.length>2?`<div style="color:var(--text2)">+${po.lines.length-2} more</div>`:''}</td><td><div style="font-size:12px">${paidC}/${po.payments.length} paid</div>${ovdC?`<span class="bdg bdn" style="margin-top:3px">${ovdC} overdue</span>`:''}<div style="font-size:11px;color:var(--text2)">$${fm(payOwed(po))} owed</div></td><td><div style="display:flex;gap:4px;flex-wrap:wrap"><button class="btn bts" onclick="openPO('${po.id}')">Edit</button><button class="btn bts" onclick="openPayDetail('${po.id}')">Payments</button><button class="btd" onclick="confirmDeletePO('${po.id}')">Delete</button></div></td></tr>`}).join(''):`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text2)">No POs${anyF?' match filters':''}</td></tr>`}
+      ${act.length?act.map(po=>{const s=sup(po.supId);const paidC=po.payments.filter(p=>p.status==='Paid').length;const ovdC=po.payments.filter(p=>p.status==='Overdue').length;return`<tr><td style="font-weight:600">${po.id}</td><td><div style="font-weight:600">${s.name}</div><div style="font-size:11px;color:var(--text2)">${s.currency}</div></td><td>${fcn(po.fc).flag} ${fcn(po.fc).name}</td><td><div style="position:relative;display:inline-block">${sPill(po)}</div><div class="prog-w"><div class="prog-b" style="width:${SC[po.status]?.pr??0}%"></div></div></td><td>${od(po)?`<span class="ov">⚠ Overdue<br></span>`:''}<span style="font-size:12px">${po.exp||'—'}</span></td><td style="font-size:12px">${po.lines.slice(0,2).map(l=>`<div>${l.o}× ${l.p}</div>`).join('')}${po.lines.length>2?`<div style="color:var(--text2)">+${po.lines.length-2} more</div>`:''}</td><td><div style="font-size:12px">${paidC}/${po.payments.length} paid</div>${ovdC?`<span class="bdg bdn" style="margin-top:3px">${ovdC} overdue</span>`:''}<div style="font-size:11px;color:var(--text2)">$${fm(payOwed(po))} owed</div></td><td><div style="display:flex;gap:4px;flex-wrap:wrap"><button class="btn bts" onclick="openPO('${po.id}')">Edit</button><button class="btn bts" onclick="openPayDetail('${po.id}')">Payments</button><button class="btd" onclick="confirmDeletePO('${po.id}')">Delete</button></div></td></tr>`}).join(''):`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text2)">No active POs${anyF?' match filters':''}. <button class="btn bts" onclick="openPO(null)">Create one</button></td></tr>`}
       </tbody></table>
     </div>
     <div class="card">
-      <div class="ct">Completed POs <span class="bdg bmu">${POS.filter(p=>p.status==='Received').length} total</span><span style="font-size:11px;color:var(--text2)">Editable — click Edit to correct mistakes</span></div>
+      <div class="ct">Completed POs</div>
       <table class="sf-t"><thead><tr><th>PO</th><th>Supplier</th><th>FC</th><th>Status</th><th>Delivered</th><th>Value</th><th>Payment</th><th></th></tr></thead><tbody>
-      ${rec.length?rec.map(po=>`<tr><td style="font-weight:600">${po.id}</td><td>${sup(po.supId).name}</td><td>${fcn(po.fc).flag} ${fcn(po.fc).name}</td><td><div style="position:relative;display:inline-block">${sPill(po)}</div></td><td style="font-size:12px">${po.exp}</td><td style="font-size:12px;font-weight:600">$${fm(poTotal(po))}</td><td><span class="bdg ${po.payments.every(p=>p.status==='Paid')?'bok':'bwn'}">${po.payments.filter(p=>p.status==='Paid').length}/${po.payments.length} paid</span></td><td><div style="display:flex;gap:4px"><button class="btn bts" onclick="openPO('${po.id}')">Edit</button><button class="btn bts" onclick="openPayDetail('${po.id}')">Payments</button><button class="btd" onclick="confirmDeletePO('${po.id}')">Delete</button></div></td></tr>`).join(''):`<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--text2)">No completed POs${anyF?' match filters':''}</td></tr>`}
+      ${rec.length?rec.map(po=>`<tr><td style="font-weight:600">${po.id}</td><td>${sup(po.supId).name}</td><td>${fcn(po.fc).flag} ${fcn(po.fc).name}</td><td><div style="position:relative;display:inline-block">${sPill(po)}</div></td><td style="font-size:12px">${po.exp}</td><td style="font-size:12px;font-weight:600">$${fm(poTotal(po))}</td><td><span class="bdg ${po.payments.every(p=>p.status==='Paid')?'bok':'bwn'}">${po.payments.filter(p=>p.status==='Paid').length}/${po.payments.length} paid</span></td><td><div style="display:flex;gap:4px"><button class="btn bts" onclick="openPO('${po.id}')">Edit</button><button class="btn bts" onclick="openPayDetail('${po.id}')">Payments</button><button class="btd" onclick="confirmDeletePO('${po.id}')">Delete</button></div></td></tr>`).join(''):`<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--text2)">No completed POs</td></tr>`}
       </tbody></table>
     </div>`;
 }
 function rSuppliers(){
   const poCount=id=>POS.filter(p=>p.supId===id).length;
   document.getElementById('tab-suppliers').innerHTML=`
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div><div style="font-size:14px;font-weight:600">Saved suppliers</div><div class="sn" style="margin:2px 0 0">Reused across all POs. Edit once, updates everywhere.</div></div><button class="btn btp" onclick="openSupplier(null)">+ Add supplier</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div><div style="font-size:14px;font-weight:600">Saved suppliers</div></div><button class="btn btp" onclick="openSupplier(null)">+ Add supplier</button></div>
     ${SUPPLIERS.map(s=>`<div class="sup-card"><div class="sup-av">${s.name.slice(0,2).toUpperCase()}</div><div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px"><span style="font-size:14px;font-weight:600">${s.name}</span><span class="bdg bmu">${s.currency}</span><span class="bdg bmu">${poCount(s.id)} PO${poCount(s.id)!==1?'s':''}</span></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px 16px;font-size:12px;color:var(--text2)">${s.contact?`<div>👤 ${s.contact}</div>`:''} ${s.email?`<div>✉ ${s.email}</div>`:''} ${s.phone?`<div>📞 ${s.phone}</div>`:''} ${s.addr?`<div>📍 ${s.addr}</div>`:''}<div>💳 ${s.payTerms}</div>${s.bankName?`<div>🏦 ${s.bankName} ${s.bankAcct}</div>`:''}</div>${s.notes?`<div style="font-size:12px;color:var(--text2);margin-top:6px;padding:6px 10px;background:var(--bg2);border-radius:6px">${s.notes}</div>`:''}</div><div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end"><button class="btn bts" onclick="openSupplier('${s.id}')">Edit</button><button class="btn bts" onclick="openPO(null)">New PO</button></div></div>`).join('')}`;
 }
 function rPayments(){
   const all=POS.flatMap(po=>po.payments.map(p=>({...p,po})));const overdue=all.filter(p=>p.status==='Overdue');const upcoming=all.filter(p=>p.status==='Unpaid'&&p.dueDate&&p.dueDate>TODAY).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));const paid=all.filter(p=>p.status==='Paid');
   document.getElementById('tab-payments').innerHTML=`
-    <div class="g4"><div class="mc"><div class="ml">Total paid</div><div class="mv" style="color:var(--green)">$${fm(paid.reduce((s,p)=>s+p.amount,0))}</div></div><div class="mc"><div class="ml">Outstanding</div><div class="mv" style="color:var(--warn)">$${fm(all.filter(p=>p.status!=='Paid').reduce((s,p)=>s+p.amount,0))}</div></div><div class="mc"><div class="ml">Overdue</div><div class="mv" style="${overdue.length?'color:var(--red)':''}">$${fm(overdue.reduce((s,p)=>s+p.amount,0))}</div></div><div class="mc"><div class="ml">Upcoming (30d)</div><div class="mv">$${fm(upcoming.filter(p=>p.dueDate<=new Date(new Date(TODAY).getTime()+30*864e5).toISOString().split('T')[0]).reduce((s,p)=>s+p.amount,0))}</div></div></div>
-    ${overdue.length?`<div class="card" style="border-color:var(--red)"><div class="ct">Overdue <span class="bdg bdn">${overdue.length}</span></div><table class="sf-t"><thead><tr><th>PO</th><th>Type</th><th>Supplier</th><th>Invoice</th><th>File</th><th>Due</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>${overdue.map(p=>`<tr><td style="font-weight:600">${p.po.id}</td><td>${p.type}</td><td>${sup(p.po.supId).name}</td><td style="font-size:12px">${p.invNum||'—'}</td><td>${INV_FILES[p.id]?`<button class="btn bts" onclick="viewInv('${p.id}')">📄 View</button>`:'—'}</td><td><span class="ov">${fmtD(p.dueDate)}</span></td><td style="text-align:right;font-weight:600">$${fm(p.amount)}</td><td><div style="display:flex;gap:4px"><button class="btn bts" style="color:var(--green);border-color:var(--green)" onclick="markPaid('${p.po.id}','${p.id}');rPayments()">Mark paid</button><button class="btn bts" onclick="editPayMs('${p.po.id}','${p.id}')">Edit</button></div></td></tr>`).join('')}</tbody></table></div>`:''}
-    <div class="card"><div class="ct">Upcoming payments</div>${upcoming.length?`<table class="sf-t"><thead><tr><th>PO</th><th>Type</th><th>Supplier</th><th>Invoice</th><th>File</th><th>Due</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>${upcoming.map(p=>`<tr><td style="font-weight:600">${p.po.id}</td><td>${p.type}</td><td>${sup(p.po.supId).name}</td><td style="font-size:12px">${p.invNum||'—'}</td><td>${INV_FILES[p.id]?`<button class="btn bts" onclick="viewInv('${p.id}')">📄 View</button>`:'—'}</td><td style="font-size:12px">${fmtD(p.dueDate)}</td><td style="text-align:right;font-weight:600">$${fm(p.amount)}</td><td><div style="display:flex;gap:4px"><button class="btn bts" onclick="editPayMs('${p.po.id}','${p.id}')">Edit</button><button class="btn bts" onclick="openPayDetail('${p.po.id}')">View PO</button></div></td></tr>`).join('')}</tbody></table>`:'<div class="sn">No upcoming payments scheduled</div>'}</div>
-    <div class="card"><div class="ct">Payment history <span class="bdg bmu">${paid.length} payments</span></div><table class="sf-t"><thead><tr><th>PO</th><th>Type</th><th>Supplier</th><th>Invoice</th><th>File</th><th>Paid on</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>${paid.length?paid.sort((a,b)=>(b.paidDate||'').localeCompare(a.paidDate||'')).map(p=>`<tr><td style="font-weight:600">${p.po.id}</td><td>${p.type}</td><td>${sup(p.po.supId).name}</td><td style="font-size:12px">${p.invNum||'—'}</td><td>${INV_FILES[p.id]?`<button class="btn bts" onclick="viewInv('${p.id}')">📄 View</button>`:'—'}</td><td style="font-size:12px">${fmtD(p.paidDate)}</td><td style="text-align:right;font-weight:600">$${fm(p.amount)}</td><td><button class="btn bts" onclick="editPayMs('${p.po.id}','${p.id}')">Edit</button></td></tr>`).join(''):'<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--text2)">No payments recorded</td></tr>'}</tbody></table></div>`;
+    <div class="g4"><div class="mc"><div class="ml">Total paid</div><div class="mv" style="color:var(--green)">$${fm(paid.reduce((s,p)=>s+p.amount,0))}</div></div><div class="mc"><div class="ml">Outstanding</div><div class="mv" style="color:var(--warn)">$${fm(all.filter(p=>p.status!=='Paid').reduce((s,p)=>s+p.amount,0))}</div></div><div class="mc"><div class="ml">Overdue</div><div class="mv" style="${overdue.length?'color:var(--red)':''}">$${fm(overdue.reduce((s,p)=>s+p.amount,0))}</div></div><div class="mc"><div class="ml">No POs yet</div><div class="mv" style="color:var(--text3)">—</div></div></div>
+    ${overdue.length?`<div class="card" style="border-color:var(--red)"><div class="ct">Overdue <span class="bdg bdn">${overdue.length}</span></div><table class="sf-t"><thead><tr><th>PO</th><th>Type</th><th>Supplier</th><th>Due</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>${overdue.map(p=>`<tr><td style="font-weight:600">${p.po.id}</td><td>${p.type}</td><td>${sup(p.po.supId).name}</td><td><span class="ov">${fmtD(p.dueDate)}</span></td><td style="text-align:right;font-weight:600">$${fm(p.amount)}</td><td><button class="btn bts" style="color:var(--green);border-color:var(--green)" onclick="markPaid('${p.po.id}','${p.id}');rPayments()">Mark paid</button></td></tr>`).join('')}</tbody></table></div>`:''}
+    <div class="card"><div class="ct">Upcoming payments</div>${upcoming.length?`<table class="sf-t"><thead><tr><th>PO</th><th>Type</th><th>Supplier</th><th>Due</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>${upcoming.map(p=>`<tr><td style="font-weight:600">${p.po.id}</td><td>${p.type}</td><td>${sup(p.po.supId).name}</td><td style="font-size:12px">${fmtD(p.dueDate)}</td><td style="text-align:right;font-weight:600">$${fm(p.amount)}</td><td><button class="btn bts" onclick="openPayDetail('${p.po.id}')">View PO</button></td></tr>`).join('')}</tbody></table>`:'<div class="sn">No upcoming payments.</div>'}</div>
+    <div class="card"><div class="ct">Payment history</div><table class="sf-t"><thead><tr><th>PO</th><th>Type</th><th>Supplier</th><th>Paid on</th><th style="text-align:right">Amount</th></tr></thead><tbody>${paid.length?paid.sort((a,b)=>(b.paidDate||'').localeCompare(a.paidDate||'')).map(p=>`<tr><td style="font-weight:600">${p.po.id}</td><td>${p.type}</td><td>${sup(p.po.supId).name}</td><td style="font-size:12px">${fmtD(p.paidDate)}</td><td style="text-align:right;font-weight:600">$${fm(p.amount)}</td></tr>`).join(''):'<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--text2)">No payments recorded</td></tr>'}</tbody></table></div>`;
 }
 const TABS=['overview','inventory','bundles','forecast','reorder','po','suppliers','payments'];
 const TLBLS={overview:'Overview',inventory:'Inventory',bundles:'Bundles',forecast:'Forecast',reorder:'Reorder',po:'Purchase Orders',suppliers:'Suppliers',payments:'Payments'};
@@ -379,74 +426,6 @@ function switchTab(t){activeTab=t;TABS.forEach(x=>{const el=document.getElementB
 function rActive(){RFNS[activeTab]?.()}
 document.getElementById('tnav').innerHTML=TABS.map(t=>`<button class="tb${t==='po'?' active':''}" data-t="${t}">${TLBLS[t]}</button>`).join('');
 document.querySelectorAll('.tb').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.t)));
-let shConnected=false,skConnected=false;
-
-function updateDsrc(){
-  const el=document.getElementById('dsrc');if(!el)return;
-  if(shConnected&&skConnected)el.textContent='Shopify + ShipHero live';
-  else if(shConnected)el.textContent='ShipHero live';
-  else if(skConnected)el.textContent='Shopify live';
-  else el.textContent='';
-}
-
-async function syncShipHero(btn){
-  btn.textContent='⟳ Loading…';btn.disabled=true;
-  try{
-    const r=await fetch('/api/live/shiphero');
-    const d=await r.json();
-    if(!r.ok||d.error)throw new Error(d.error||'ShipHero error');
-    // Populate Tidal Wave stock
-    STOCK.tw={};
-    for(const[product,inv]of Object.entries(d.stock)){STOCK.tw[product]=inv.available}
-    shConnected=true;
-    btn.textContent='● ShipHero';btn.style.color='var(--green)';btn.disabled=false;
-    updateDsrc();rActive();
-    console.log('[ShipHero] Loaded',Object.keys(STOCK.tw).length,'products');
-  }catch(e){
-    btn.textContent='✕ ShipHero error';btn.style.color='var(--red)';btn.disabled=false;
-    setTimeout(()=>{btn.textContent='◯ ShipHero';btn.style.color='';shConnected=false},3000);
-    console.error('[ShipHero]',e.message);
-  }
-}
-
-async function syncShopify(btn){
-  btn.textContent='⟳ Loading…';btn.disabled=true;
-  try{
-    const r=await fetch('/api/live/shopify');
-    const d=await r.json();
-    if(!r.ok||d.error)throw new Error(d.error||'Shopify error');
-    // Populate global stock totals and velocity
-if(d.au_stock){STOCK.vi={};for(const[product,qty]of Object.entries(d.au_stock)){STOCK.vi[product]=qty}}
-    // Update daily velocity with real 30-day data
-if(d.velocity_us){if(!DAILY.tw)DAILY.tw={};for(const[product,vel]of Object.entries(d.velocity_us)){DAILY.tw[product]=vel}}
-if(d.velocity_au){if(!DAILY.vi)DAILY.vi={};for(const[product,vel]of Object.entries(d.velocity_au)){DAILY.vi[product]=vel}}
-}
-    skConnected=true;
-    btn.textContent='● Shopify';btn.style.color='var(--green)';btn.disabled=false;
-    updateDsrc();rActive();
-    console.log('[Shopify] Loaded',Object.keys(STOCK.shopify).length,'products,',d.orders_analysed,'orders analysed');
-  }catch(e){
-    btn.textContent='✕ Shopify error';btn.style.color='var(--red)';btn.disabled=false;
-    setTimeout(()=>{btn.textContent='◯ Shopify';btn.style.color='';skConnected=false},3000);
-    console.error('[Shopify]',e.message);
-  }
-}
-
-document.getElementById('sh-btn').addEventListener('click',function(){
-  if(shConnected){shConnected=false;STOCK.tw={};this.textContent='◯ ShipHero';this.style.color='';updateDsrc();rActive();return}
-  syncShipHero(this);
-});
-
-document.getElementById('sk-btn').addEventListener('click',function(){
-  if(skConnected){skConnected=false;STOCK.shopify={};this.textContent='◯ Shopify';this.style.color='';updateDsrc();rActive();return}
-  syncShopify(this);
-});
-
-// Auto-sync on page load if previously connected (stored in sessionStorage)
-window.addEventListener('load', () => {
-  syncShopify(document.getElementById('sk-btn'));
-  syncShipHero(document.getElementById('sh-btn'));
-});
 switchTab('po');
 </script>
 </body>
