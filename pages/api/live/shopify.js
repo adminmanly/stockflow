@@ -84,6 +84,9 @@ while (ordersUrl && pageCount < 50) {
       pageCount++
 
       for (const order of ordersData.orders || []) {
+        if (pageCount === 1 && totalOrders <= 5) {
+  console.log('SAMPLE LINE ITEMS:', JSON.stringify(order.line_items.slice(0,3)))
+}
         const country = order.shipping_address?.country_code || 'US'
         const isAU = country === 'AU'
 
