@@ -86,7 +86,8 @@ export default async function handler(req, res) {
         const isAU = country === 'AU'
 
         for (const item of order.line_items) {
-          if (!item.sku || !TRACKED_SKUS.has(item.sku)) continue
+if (!item.sku || !TRACKED_SKUS.has(item.sku)) continue
+if (parseFloat(item.price) === 0) continue  // skip $0 bundle component additions
           if (isAU) {
             soldBySkuAU[item.sku] = (soldBySkuAU[item.sku] || 0) + item.quantity
           } else {
