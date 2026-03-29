@@ -418,7 +418,6 @@ async function syncShopify(btn){
     // Populate global stock totals and velocity
 if(d.au_stock){STOCK.vi={};for(const[product,qty]of Object.entries(d.au_stock)){STOCK.vi[product]=qty}}
     // Update daily velocity with real 30-day data
- for(const[product,vel]of Object.entries(d.velocity)){
 if(d.velocity_us){if(!DAILY.tw)DAILY.tw={};for(const[product,vel]of Object.entries(d.velocity_us)){DAILY.tw[product]=vel}}
 if(d.velocity_au){if(!DAILY.vi)DAILY.vi={};for(const[product,vel]of Object.entries(d.velocity_au)){DAILY.vi[product]=vel}}
 }
