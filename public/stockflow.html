@@ -419,7 +419,8 @@ async function syncShopify(btn){
 if(d.au_stock){STOCK.vi={};for(const[product,qty]of Object.entries(d.au_stock)){STOCK.vi[product]=qty}}
     // Update daily velocity with real 30-day data
  for(const[product,vel]of Object.entries(d.velocity)){
-if(d.velocity){if(!DAILY.tw)DAILY.tw={};if(!DAILY.vi)DAILY.vi={};for(const[product,vel]of Object.entries(d.velocity)){DAILY.tw[product]=vel;DAILY.vi[product]=vel}}
+if(d.velocity_us){if(!DAILY.tw)DAILY.tw={};for(const[product,vel]of Object.entries(d.velocity_us)){DAILY.tw[product]=vel}}
+if(d.velocity_au){if(!DAILY.vi)DAILY.vi={};for(const[product,vel]of Object.entries(d.velocity_au)){DAILY.vi[product]=vel}}
 }
     skConnected=true;
     btn.textContent='● Shopify';btn.style.color='var(--green)';btn.disabled=false;
