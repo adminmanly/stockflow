@@ -50,41 +50,36 @@ export default async function handler(req, res) {
     const locations = locData.locations.filter(l => l.active)
     const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
 
-    // 3. Get AU warehouse stock levels
-const auStockBySku = {}
-if (auLocation) {
-  let invUrl = `${BASE}/inventory_levels.json?location_id=${auLocation.id}&limit=250`
-  while (invUrl) {
-    const invRes = await fetch(invUrl, { headers: HEADERS })
-    if (!invRes.ok) break
-    const invData = await invRes.json()
-    for (const level of invData.inventory_levels) {
-      const sku = itemToSku[level.inventory_item_id]
-      if (!sku) continue
-      auStockBySku[sku] = Math.max(0, level.available || 0)
+    // 3. Get AU warehouse stock with pagination
+    const auStockBySku = {}
+    if (auLocation) {
+      let invUrl = `${BASE}/inventory_levels.json?location_id=${auLocation.id}&limit=250`
+      while (invUrl) {
+        const invRes = await fetch(invUrl, { headers: HEADERS })
+        if (!invRes.ok) break
+        const invData = await invRes.json()
+        for (const level of invData.inventory_levels) {
+          const sku = itemToSku[level.inventory_item_id]
+          if (!sku) continue
+          auStockBySku[sku] = Math.max(0, level.available || 0)
+        }
+        const linkHeader = invRes.headers.get('Link') || ''
+        const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
+        invUrl = nextMatch ? nextMatch[1] : null
+      }
     }
-    const linkHeader = invRes.headers.get('Link') || ''
-    const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
-    invUrl = nextMatch ? nextMatch[1] : null
-  }
-}
-    const twLocation = locations.find(l => l.name.toLowerCase().includes('tidalwave') || l.name.toLowerCase().includes('tidal'))
-    tw_location: twLocation?.name || 'not found',
-}
 
-    // 4. Get last 7 days orders split by shipping country
-const since30 = new Date()
-since30.setDate(since30.getDate() - 30)
+    // 4. Get last 30 days orders split by shipping country
+    const since30 = new Date()
+    since30.setDate(since30.getDate() - 30)
 
-const soldBySkuUS = {}
-const soldBySkuAU = {}
-let ordersUrl = `${BASE}/orders.json?status=any&financial_status=paid&created_at_min=${since30.toISOString()}&limit=250&fields=id,line_items,shipping_address`
+    const soldBySkuUS = {}
+    const soldBySkuAU = {}
+    let ordersUrl = `${BASE}/orders.json?status=any&financial_status=paid&created_at_min=${since30.toISOString()}&limit=250&fields=id,line_items,shipping_address`
     let totalOrders = 0
-let pageCount = 0
+    let pageCount = 0
 
-while (ordersUrl && pageCount < 50) {
-
-    while (ordersUrl && pageCount < 10) {
+    while (ordersUrl && pageCount < 50) {
       const ordersRes = await fetch(ordersUrl, { headers: HEADERS })
       if (!ordersRes.ok) break
       const ordersData = await ordersRes.json()
@@ -92,15 +87,12 @@ while (ordersUrl && pageCount < 50) {
       pageCount++
 
       for (const order of ordersData.orders || []) {
-        if (pageCount === 1 && totalOrders <= 5) {
-  console.log('SAMPLE LINE ITEMS:', JSON.stringify(order.line_items.slice(0,3)))
-}
         const country = order.shipping_address?.country_code || 'US'
         const isAU = country === 'AU'
 
         for (const item of order.line_items) {
-if (!item.sku || !TRACKED_SKUS.has(item.sku)) continue
-if (parseFloat(item.price) === 0) continue  // skip $0 bundle component additions
+          if (!item.sku || !TRACKED_SKUS.has(item.sku)) continue
+          if (!parseFloat(item.price)) continue  // skip $0 bundle component additions
           if (isAU) {
             soldBySkuAU[item.sku] = (soldBySkuAU[item.sku] || 0) + item.quantity
           } else {
@@ -114,15 +106,15 @@ if (parseFloat(item.price) === 0) continue  // skip $0 bundle component addition
       ordersUrl = nextMatch ? nextMatch[1] : null
     }
 
-    // 5. Build response — divide by 7 for daily velocity per country
+    // 5. Build response — divide by 30 for daily velocity
     const auStockByProduct = {}
     const velocityUSByProduct = {}
     const velocityAUByProduct = {}
 
     for (const [sku, productName] of Object.entries(SKU_MAP)) {
       auStockByProduct[productName] = auStockBySku[sku] || 0
-velocityUSByProduct[productName] = +((soldBySkuUS[sku] || 0) / 30).toFixed(1)
-velocityAUByProduct[productName] = +((soldBySkuAU[sku] || 0) / 30).toFixed(1)
+      velocityUSByProduct[productName] = +((soldBySkuUS[sku] || 0) / 30).toFixed(1)
+      velocityAUByProduct[productName] = +((soldBySkuAU[sku] || 0) / 30).toFixed(1)
     }
 
     return res.json({
