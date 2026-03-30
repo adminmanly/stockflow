@@ -33,25 +33,28 @@ export default async function handler(req, res) {
     since30.setDate(since30.getDate() - 30)
 
     // Step 1: Fetch products and locations in parallel
-    const [prodRes, locRes] = await Promise.all([
-      fetch(`${BASE}/products.json?limit=250&status=active`, { headers: HEADERS }),
-      fetch(`${BASE}/locations.json`, { headers: HEADERS }),
-    ])
+const locRes = await fetch(`${BASE}/locations.json`, { headers: HEADERS })
+if (!locRes.ok) throw new Error(`Shopify locations error: ${locRes.status}`)
+const locData = await locRes.json()
 
-    if (!prodRes.ok) throw new Error(`Shopify products error: ${prodRes.status}`)
-    if (!locRes.ok) throw new Error(`Shopify locations error: ${locRes.status}`)
-
-    const [prodData, locData] = await Promise.all([prodRes.json(), locRes.json()])
-
-    // Build inventory_item_id -> SKU map
-    const itemToSku = {}
-    for (const product of prodData.products) {
-      for (const variant of product.variants) {
-        if (variant.sku && variant.inventory_item_id) {
-          itemToSku[variant.inventory_item_id] = variant.sku
-        }
+// Paginate through ALL products to build complete inventory_item_id -> SKU map
+const itemToSku = {}
+let prodUrl = `${BASE}/products.json?limit=250&status=active`
+while (prodUrl) {
+  const prodRes = await fetch(prodUrl, { headers: HEADERS })
+  if (!prodRes.ok) throw new Error(`Shopify products error: ${prodRes.status}`)
+  const prodData = await prodRes.json()
+  for (const product of prodData.products) {
+    for (const variant of product.variants) {
+      if (variant.sku && variant.inventory_item_id) {
+        itemToSku[variant.inventory_item_id] = variant.sku
       }
     }
+  }
+  const linkHeader = prodRes.headers.get('Link') || ''
+  const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
+  prodUrl = nextMatch ? nextMatch[1] : null
+}
 
     const locations = locData.locations.filter(l => l.active)
     const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
