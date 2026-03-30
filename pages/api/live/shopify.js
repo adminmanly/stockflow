@@ -29,11 +29,21 @@ export default async function handler(req, res) {
   ])
 
   try {
-    // 1. Get products -> inventory_item_id map
-    const prodRes = await fetch(`${BASE}/products.json?limit=250&status=active`, { headers: HEADERS })
-    if (!prodRes.ok) throw new Error(`Shopify products error: ${prodRes.status}`)
-    const prodData = await prodRes.json()
+    const since30 = new Date()
+    since30.setDate(since30.getDate() - 30)
 
+    // Step 1: Fetch products and locations in parallel
+    const [prodRes, locRes] = await Promise.all([
+      fetch(`${BASE}/products.json?limit=250&status=active`, { headers: HEADERS }),
+      fetch(`${BASE}/locations.json`, { headers: HEADERS }),
+    ])
+
+    if (!prodRes.ok) throw new Error(`Shopify products error: ${prodRes.status}`)
+    if (!locRes.ok) throw new Error(`Shopify locations error: ${locRes.status}`)
+
+    const [prodData, locData] = await Promise.all([prodRes.json(), locRes.json()])
+
+    // Build inventory_item_id -> SKU map
     const itemToSku = {}
     for (const product of prodData.products) {
       for (const variant of product.variants) {
@@ -43,46 +53,40 @@ export default async function handler(req, res) {
       }
     }
 
-    // 2. Get AU warehouse location (Cooper St)
-    const locRes = await fetch(`${BASE}/locations.json`, { headers: HEADERS })
-    if (!locRes.ok) throw new Error(`Shopify locations error: ${locRes.status}`)
-    const locData = await locRes.json()
     const locations = locData.locations.filter(l => l.active)
     const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
 
-    // 3. Get AU warehouse stock with pagination
+    // Step 2: Fetch inventory levels and first orders page in parallel
+    const firstOrdersUrl = `${BASE}/orders.json?status=any&financial_status=paid&created_at_min=${since30.toISOString()}&limit=250&fields=id,line_items,shipping_address`
+
+    const [invRes, firstOrdersRes] = await Promise.all([
+      auLocation
+        ? fetch(`${BASE}/inventory_levels.json?location_id=${auLocation.id}&limit=250`, { headers: HEADERS })
+        : Promise.resolve(null),
+      fetch(firstOrdersUrl, { headers: HEADERS })
+    ])
+
+    // Process AU inventory levels
     const auStockBySku = {}
-    if (auLocation) {
-      let invUrl = `${BASE}/inventory_levels.json?location_id=${auLocation.id}&limit=250`
-      while (invUrl) {
-        const invRes = await fetch(invUrl, { headers: HEADERS })
-        if (!invRes.ok) break
-        const invData = await invRes.json()
-        for (const level of invData.inventory_levels) {
-          const sku = itemToSku[level.inventory_item_id]
-          if (!sku) continue
-          auStockBySku[sku] = Math.max(0, level.available || 0)
-        }
-        const linkHeader = invRes.headers.get('Link') || ''
-        const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
-        invUrl = nextMatch ? nextMatch[1] : null
+    if (invRes?.ok) {
+      const invData = await invRes.json()
+      for (const level of invData.inventory_levels) {
+        const sku = itemToSku[level.inventory_item_id]
+        if (!sku) continue
+        auStockBySku[sku] = Math.max(0, level.available || 0)
       }
     }
 
-    // 4. Get last 30 days orders split by shipping country
-    const since30 = new Date()
-    since30.setDate(since30.getDate() - 30)
-
+    // Step 3: Process orders (first page already fetched, paginate the rest)
     const soldBySkuUS = {}
     const soldBySkuAU = {}
-    let ordersUrl = `${BASE}/orders.json?status=any&financial_status=paid&created_at_min=${since30.toISOString()}&limit=250&fields=id,line_items,shipping_address`
     let totalOrders = 0
     let pageCount = 0
+    let currentRes = firstOrdersRes
 
-    while (ordersUrl && pageCount < 50) {
-      const ordersRes = await fetch(ordersUrl, { headers: HEADERS })
-      if (!ordersRes.ok) break
-      const ordersData = await ordersRes.json()
+    while (currentRes && pageCount < 50) {
+      if (!currentRes.ok) break
+      const ordersData = await currentRes.json()
       totalOrders += (ordersData.orders || []).length
       pageCount++
 
@@ -92,7 +96,7 @@ export default async function handler(req, res) {
 
         for (const item of order.line_items) {
           if (!item.sku || !TRACKED_SKUS.has(item.sku)) continue
-          if (!parseFloat(item.price)) continue  // skip $0 bundle component additions
+          if (!parseFloat(item.price)) continue // skip $0 bundle component additions
           if (isAU) {
             soldBySkuAU[item.sku] = (soldBySkuAU[item.sku] || 0) + item.quantity
           } else {
@@ -101,12 +105,12 @@ export default async function handler(req, res) {
         }
       }
 
-      const linkHeader = ordersRes.headers.get('Link') || ''
+      const linkHeader = currentRes.headers.get('Link') || ''
       const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
-      ordersUrl = nextMatch ? nextMatch[1] : null
+      currentRes = nextMatch ? await fetch(nextMatch[1], { headers: HEADERS }) : null
     }
 
-    // 5. Build response — divide by 30 for daily velocity
+    // Step 4: Build response
     const auStockByProduct = {}
     const velocityUSByProduct = {}
     const velocityAUByProduct = {}
