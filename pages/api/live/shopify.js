@@ -51,23 +51,25 @@ export default async function handler(req, res) {
     const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
 
     // 3. Get AU warehouse stock levels
-    const auStockBySku = {}
-let debugLevels = []
+const auStockBySku = {}
 if (auLocation) {
-  const invRes = await fetch(`${BASE}/inventory_levels.json?location_id=${auLocation.id}&limit=250`, { headers: HEADERS })
-  if (invRes.ok) {
+  let invUrl = `${BASE}/inventory_levels.json?location_id=${auLocation.id}&limit=250`
+  while (invUrl) {
+    const invRes = await fetch(invUrl, { headers: HEADERS })
+    if (!invRes.ok) break
     const invData = await invRes.json()
-    debugLevels = invData.inventory_levels.slice(0, 5).map(l => ({
-      inventory_item_id: l.inventory_item_id,
-      available: l.available,
-      sku: itemToSku[l.inventory_item_id] || 'unknown'
-    }))
     for (const level of invData.inventory_levels) {
       const sku = itemToSku[level.inventory_item_id]
-      if (!sku || level.available === null) continue
-      auStockBySku[sku] = Math.max(0, level.available)
+      if (!sku) continue
+      auStockBySku[sku] = Math.max(0, level.available || 0)
     }
+    const linkHeader = invRes.headers.get('Link') || ''
+    const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
+    invUrl = nextMatch ? nextMatch[1] : null
   }
+}
+    const twLocation = locations.find(l => l.name.toLowerCase().includes('tidalwave') || l.name.toLowerCase().includes('tidal'))
+    tw_location: twLocation?.name || 'not found',
 }
 
     // 4. Get last 7 days orders split by shipping country
