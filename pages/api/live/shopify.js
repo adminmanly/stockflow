@@ -42,48 +42,50 @@ export default async function handler(req, res) {
     const [prodData, locData] = await Promise.all([prodRes.json(), locRes.json()])
 
     // Build inventory_item_id -> SKU map
-const itemToSku = {}
-const skuToItemId = {}
+    const itemToSku = {}
+    const skuToItemId = {}
 
-const processProducts = (products) => {
-  for (const product of products) {
-    for (const variant of product.variants) {
-      if (variant.sku && variant.inventory_item_id) {
-        itemToSku[variant.inventory_item_id] = variant.sku
-        skuToItemId[variant.sku] = variant.inventory_item_id
+    const processProducts = (products) => {
+      for (const product of products) {
+        for (const variant of product.variants) {
+          if (variant.sku && variant.inventory_item_id) {
+            itemToSku[variant.inventory_item_id] = variant.sku
+            skuToItemId[variant.sku] = variant.inventory_item_id
+          }
+        }
       }
     }
-  }
-}
 
-processProducts(prodData.products)
+    processProducts(prodData.products)
 
-// Fetch page 2 if needed and our SKUs aren't all found yet
-if (prodData.products.length === 250) {
-  const linkHeader = prodRes.headers.get('Link') || ''
-  const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
-  if (nextMatch) {
-    const prod2Res = await fetch(nextMatch[1], { headers: HEADERS })
-    if (prod2Res.ok) {
-      const prod2Data = await prod2Res.json()
-      processProducts(prod2Data.products)
+    // Look up any missing SKUs directly via variants API
+    const missingSKUs = Object.keys(SKU_MAP).filter(sku => !skuToItemId[sku])
+    if (missingSKUs.length > 0) {
+      await Promise.all(missingSKUs.map(async (sku) => {
+        const vRes = await fetch(`${BASE}/variants.json?sku=${encodeURIComponent(sku)}&limit=10`, { headers: HEADERS })
+        if (vRes.ok) {
+          const vData = await vRes.json()
+          for (const v of vData.variants || []) {
+            if (v.sku && v.inventory_item_id) {
+              itemToSku[v.inventory_item_id] = v.sku
+              skuToItemId[v.sku] = v.inventory_item_id
+            }
+          }
+        }
+      }))
     }
-  }
-}
 
     const locations = locData.locations.filter(l => l.active)
     const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
 
-    // Step 2: Get AU stock using inventory_items API with our specific SKUs
+    // Step 2: Get AU stock using specific inventory item IDs
     const auStockBySku = {}
     if (auLocation) {
-      // Get inventory item IDs for our tracked SKUs
       const trackedItemIds = Object.keys(SKU_MAP)
         .map(sku => skuToItemId[sku])
         .filter(Boolean)
 
       if (trackedItemIds.length > 0) {
-        // Fetch inventory levels for our specific items at the AU location
         const invRes = await fetch(
           `${BASE}/inventory_levels.json?location_id=${auLocation.id}&inventory_item_ids=${trackedItemIds.join(',')}&limit=250`,
           { headers: HEADERS }
@@ -99,7 +101,7 @@ if (prodData.products.length === 250) {
       }
     }
 
-    // Step 3: Process orders (first page already fetched, paginate the rest)
+    // Step 3: Process orders with pagination
     const soldBySkuUS = {}
     const soldBySkuAU = {}
     let totalOrders = 0
@@ -152,7 +154,6 @@ if (prodData.products.length === 250) {
       au_location: auLocation?.name || 'not found',
       orders_analysed: totalOrders,
       period_days: 30,
-      debug_item_ids_found: Object.keys(skuToItemId).length,
     })
 
   } catch (err) {
