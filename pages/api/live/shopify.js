@@ -23,60 +23,61 @@ export default async function handler(req, res) {
     'CW-MANLY': 'Cooling Wipes',
   }
 
-  const TRACKED_SKUS = new Set([
-    'BWc&c-MANLY', 'Dc&c-MANLY', 'SHAc&c-MANLY', 'CONc&c-MANLY',
-    'SSC&C', 'BB-MANLY', 'SCALP-MANLY', 'CW-MANLY'
-  ])
+  const TRACKED_SKUS = new Set(Object.keys(SKU_MAP))
 
   try {
     const since30 = new Date()
     since30.setDate(since30.getDate() - 30)
 
-    // Step 1: Fetch products and locations in parallel
-const locRes = await fetch(`${BASE}/locations.json`, { headers: HEADERS })
-if (!locRes.ok) throw new Error(`Shopify locations error: ${locRes.status}`)
-const locData = await locRes.json()
+    // Step 1: Fetch products, locations, and first orders page all in parallel
+    const [prodRes, locRes, firstOrdersRes] = await Promise.all([
+      fetch(`${BASE}/products.json?limit=250&status=active`, { headers: HEADERS }),
+      fetch(`${BASE}/locations.json`, { headers: HEADERS }),
+      fetch(`${BASE}/orders.json?status=any&financial_status=paid&created_at_min=${since30.toISOString()}&limit=250&fields=id,line_items,shipping_address`, { headers: HEADERS })
+    ])
 
-// Paginate through ALL products to build complete inventory_item_id -> SKU map
-const itemToSku = {}
-let prodUrl = `${BASE}/products.json?limit=250&status=active`
-while (prodUrl) {
-  const prodRes = await fetch(prodUrl, { headers: HEADERS })
-  if (!prodRes.ok) throw new Error(`Shopify products error: ${prodRes.status}`)
-  const prodData = await prodRes.json()
-  for (const product of prodData.products) {
-    for (const variant of product.variants) {
-      if (variant.sku && variant.inventory_item_id) {
-        itemToSku[variant.inventory_item_id] = variant.sku
+    if (!prodRes.ok) throw new Error(`Shopify products error: ${prodRes.status}`)
+    if (!locRes.ok) throw new Error(`Shopify locations error: ${locRes.status}`)
+
+    const [prodData, locData] = await Promise.all([prodRes.json(), locRes.json()])
+
+    // Build inventory_item_id -> SKU map
+    const itemToSku = {}
+    const skuToItemId = {}
+    for (const product of prodData.products) {
+      for (const variant of product.variants) {
+        if (variant.sku && variant.inventory_item_id) {
+          itemToSku[variant.inventory_item_id] = variant.sku
+          skuToItemId[variant.sku] = variant.inventory_item_id
+        }
       }
     }
-  }
-  const linkHeader = prodRes.headers.get('Link') || ''
-  const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
-  prodUrl = nextMatch ? nextMatch[1] : null
-}
 
     const locations = locData.locations.filter(l => l.active)
     const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
 
-    // Step 2: Fetch inventory levels and first orders page in parallel
-    const firstOrdersUrl = `${BASE}/orders.json?status=any&financial_status=paid&created_at_min=${since30.toISOString()}&limit=250&fields=id,line_items,shipping_address`
-
-    const [invRes, firstOrdersRes] = await Promise.all([
-      auLocation
-        ? fetch(`${BASE}/inventory_levels.json?location_id=${auLocation.id}&limit=250`, { headers: HEADERS })
-        : Promise.resolve(null),
-      fetch(firstOrdersUrl, { headers: HEADERS })
-    ])
-
-    // Process AU inventory levels
+    // Step 2: Get AU stock using inventory_items API with our specific SKUs
     const auStockBySku = {}
-    if (invRes?.ok) {
-      const invData = await invRes.json()
-      for (const level of invData.inventory_levels) {
-        const sku = itemToSku[level.inventory_item_id]
-        if (!sku) continue
-        auStockBySku[sku] = Math.max(0, level.available || 0)
+    if (auLocation) {
+      // Get inventory item IDs for our tracked SKUs
+      const trackedItemIds = Object.keys(SKU_MAP)
+        .map(sku => skuToItemId[sku])
+        .filter(Boolean)
+
+      if (trackedItemIds.length > 0) {
+        // Fetch inventory levels for our specific items at the AU location
+        const invRes = await fetch(
+          `${BASE}/inventory_levels.json?location_id=${auLocation.id}&inventory_item_ids=${trackedItemIds.join(',')}&limit=250`,
+          { headers: HEADERS }
+        )
+        if (invRes.ok) {
+          const invData = await invRes.json()
+          for (const level of invData.inventory_levels) {
+            const sku = itemToSku[level.inventory_item_id]
+            if (!sku) continue
+            auStockBySku[sku] = Math.max(0, level.available || 0)
+          }
+        }
       }
     }
 
@@ -99,7 +100,7 @@ while (prodUrl) {
 
         for (const item of order.line_items) {
           if (!item.sku || !TRACKED_SKUS.has(item.sku)) continue
-          if (!parseFloat(item.price)) continue // skip $0 bundle component additions
+          if (!parseFloat(item.price)) continue
           if (isAU) {
             soldBySkuAU[item.sku] = (soldBySkuAU[item.sku] || 0) + item.quantity
           } else {
@@ -133,6 +134,7 @@ while (prodUrl) {
       au_location: auLocation?.name || 'not found',
       orders_analysed: totalOrders,
       period_days: 30,
+      debug_item_ids_found: Object.keys(skuToItemId).length,
     })
 
   } catch (err) {
