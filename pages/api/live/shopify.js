@@ -42,16 +42,34 @@ export default async function handler(req, res) {
     const [prodData, locData] = await Promise.all([prodRes.json(), locRes.json()])
 
     // Build inventory_item_id -> SKU map
-    const itemToSku = {}
-    const skuToItemId = {}
-    for (const product of prodData.products) {
-      for (const variant of product.variants) {
-        if (variant.sku && variant.inventory_item_id) {
-          itemToSku[variant.inventory_item_id] = variant.sku
-          skuToItemId[variant.sku] = variant.inventory_item_id
-        }
+const itemToSku = {}
+const skuToItemId = {}
+
+const processProducts = (products) => {
+  for (const product of products) {
+    for (const variant of product.variants) {
+      if (variant.sku && variant.inventory_item_id) {
+        itemToSku[variant.inventory_item_id] = variant.sku
+        skuToItemId[variant.sku] = variant.inventory_item_id
       }
     }
+  }
+}
+
+processProducts(prodData.products)
+
+// Fetch page 2 if needed and our SKUs aren't all found yet
+if (prodData.products.length === 250) {
+  const linkHeader = prodRes.headers.get('Link') || ''
+  const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
+  if (nextMatch) {
+    const prod2Res = await fetch(nextMatch[1], { headers: HEADERS })
+    if (prod2Res.ok) {
+      const prod2Data = await prod2Res.json()
+      processProducts(prod2Data.products)
+    }
+  }
+}
 
     const locations = locData.locations.filter(l => l.active)
     const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
