@@ -52,17 +52,23 @@ export default async function handler(req, res) {
 
     // 3. Get AU warehouse stock levels
     const auStockBySku = {}
-    if (auLocation) {
-      const invRes = await fetch(`${BASE}/inventory_levels.json?location_id=${auLocation.id}&limit=250`, { headers: HEADERS })
-      if (invRes.ok) {
-        const invData = await invRes.json()
-        for (const level of invData.inventory_levels) {
-          const sku = itemToSku[level.inventory_item_id]
-          if (!sku || level.available === null) continue
-          auStockBySku[sku] = Math.max(0, level.available)
-        }
-      }
+let debugLevels = []
+if (auLocation) {
+  const invRes = await fetch(`${BASE}/inventory_levels.json?location_id=${auLocation.id}&limit=250`, { headers: HEADERS })
+  if (invRes.ok) {
+    const invData = await invRes.json()
+    debugLevels = invData.inventory_levels.slice(0, 5).map(l => ({
+      inventory_item_id: l.inventory_item_id,
+      available: l.available,
+      sku: itemToSku[l.inventory_item_id] || 'unknown'
+    }))
+    for (const level of invData.inventory_levels) {
+      const sku = itemToSku[level.inventory_item_id]
+      if (!sku || level.available === null) continue
+      auStockBySku[sku] = Math.max(0, level.available)
     }
+  }
+}
 
     // 4. Get last 7 days orders split by shipping country
 const since30 = new Date()
