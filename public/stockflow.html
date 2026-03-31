@@ -100,6 +100,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div id="tab-payments" class="tab-content"></div>
 </div>
 <script>
+var VELOCITY_PERIOD=30;
 const FCS=[{id:'tw',name:'Tidal Wave',flag:'🇺🇸',loc:'United States'},{id:'vi',name:'Internal WH',flag:'🇦🇺',loc:'Victoria, AU'}];
 const TODAY=new Date().toISOString().split('T')[0];
 const SC={'Draft':{bg:'#e2e0d9',tc:'#4f4e4a',pr:0},'Submitted':{bg:'#d8e9f7',tc:'#185fa5',pr:12},'Confirmed':{bg:'#e3e0fc',tc:'#4540a8',pr:25},'In Production':{bg:'#f4dbe8',tc:'#882a4e',pr:38},'Shipped':{bg:'#caeedd',tc:'#0c6849',pr:55},'In Transit':{bg:'#9ddfc6',tc:'#064d3a',pr:68},'Customs':{bg:'#fae0a8',tc:'#7a4808',pr:72},'At FC':{bg:'#f7be58',tc:'#5a3300',pr:85},'Received':{bg:'#d1ecb8',tc:'#2f5e0e',pr:100}};
@@ -157,7 +158,7 @@ async function syncShipHero(btn){
 async function syncShopify(btn){
   btn.textContent='⟳ Shopify…';btn.disabled=true;
   try{
-const r=await fetch('/api/live/shopify?days='+(typeof VELOCITY_PERIOD!=='undefined'?VELOCITY_PERIOD:30));
+    const r=await fetch('/api/live/shopify?days='+VELOCITY_PERIOD);
     const d=await r.json();
     if(!r.ok||d.error)throw new Error(d.error||'Shopify error');
     if(d.au_stock){for(const[product,qty]of Object.entries(d.au_stock)){STOCK.vi[product]=qty}}
@@ -397,7 +398,7 @@ function uReorder(){
     <div class="g4" style="margin-bottom:14px">
       <div class="mc"><div class="ml">Actual daily revenue <span class="bdg bmu">${VELOCITY_PERIOD}d avg</span></div><div class="mv">$${fm(dailyRev)}</div><div class="ms">$${fm(periodRev)} over ${VELOCITY_PERIOD} days</div></div>
       <div class="mc"><div class="ml">Projected over ${tDays}d</div><div class="mv">$${fm(projectedRev)}</div><div class="ms">At current velocity</div></div>
-      <div class="mc"><div class="ml">Revenue target</div><div class="mv">$${fm(tRev)}</div><div class="ms" style="${multiplier>1?'color:var(--warn)':'color:var(--green)'}">${multLabel}</div></div>
+      <div class="mc"><div class="ml">Revenue target</div><div class="mv">$${fm(tRev)}</div><div class="ms" style="${multiplier>1?`color:var(--warn)`:`color:var(--green)`}">${multLabel}</div></div>
       <div class="mc"><div class="ml">Est. COGS to order</div><div class="mv">$${fm(totalCogs)}</div><div class="ms">${hasCogs?'From Shopify cost fields':'Add costs in Shopify'}</div></div>
     </div>
     <div class="card">
