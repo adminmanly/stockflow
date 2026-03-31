@@ -524,13 +524,6 @@ function rPayments(){
     <div class="card"><div class="ct">Upcoming payments</div>${upcoming.length?`<table class="sf-t"><thead><tr><th>PO</th><th>Type</th><th>Supplier</th><th>Due</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>${upcoming.map(p=>`<tr><td style="font-weight:600">${p.po.id}</td><td>${p.type}</td><td>${sup(p.po.supId).name}</td><td style="font-size:12px">${fmtD(p.dueDate)}</td><td style="text-align:right;font-weight:600">$${fm(p.amount)}</td><td><button class="btn bts" onclick="openPayDetail('${p.po.id}')">View PO</button></td></tr>`).join('')}</tbody></table>`:'<div class="sn">No upcoming payments.</div>'}</div>
     <div class="card"><div class="ct">Payment history</div><table class="sf-t"><thead><tr><th>PO</th><th>Type</th><th>Supplier</th><th>Paid on</th><th style="text-align:right">Amount</th></tr></thead><tbody>${paid.length?paid.sort((a,b)=>(b.paidDate||'').localeCompare(a.paidDate||'')).map(p=>`<tr><td style="font-weight:600">${p.po.id}</td><td>${p.type}</td><td>${sup(p.po.supId).name}</td><td style="font-size:12px">${fmtD(p.paidDate)}</td><td style="text-align:right;font-weight:600">$${fm(p.amount)}</td></tr>`).join(''):'<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--text2)">No payments recorded</td></tr>'}</tbody></table></div>`;
 }
-const TABS=['overview','inventory','bundles','forecast','reorder','po','suppliers','payments','packaging'];
-const TLBLS={overview:'Overview',inventory:'Inventory',bundles:'Bundles',forecast:'Forecast',reorder:'Reorder',po:'Purchase Orders',suppliers:'Suppliers',payments:'Payments',packaging:'📦 Packaging'};
-const RFNS={overview:rOverview,inventory:rInventory,bundles:rBundles,forecast:rForecast,reorder:rReorder,po:rPO,suppliers:rSuppliers,payments:rPayments,packaging:rPackaging};
-function switchTab(t){activeTab=t;TABS.forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('active',x===t)});document.querySelectorAll('.tb').forEach(b=>b.classList.toggle('active',b.dataset.t===t));RFNS[t]?.()}
-function rActive(){RFNS[activeTab]?.()}
-document.getElementById('tnav').innerHTML=TABS.map(t=>`<button class="tb${t==='po'?' active':''}" data-t="${t}">${TLBLS[t]}</button>`).join('');
-document.querySelectorAll('.tb').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.t)));
 
 // ─── PACKAGING PROJECTION ────────────────────────────────────────────────────
 
@@ -559,199 +552,117 @@ const BUNDLE_EXPAND={
   'REPAIR': {'SHAc&c-MANLY':1,'CONc&c-MANLY':1},
 };
 
-function calcPackaging(lineItems){
-  // Step 1: expand bundles + map to categories
-  const cats={deodorant:0,bottle:0,scalp_scrubber:0,body_buffer:0,cooling_wipes:0};
+function calcPackaging(lineItems, halfMailerStock){
+  // Step 1: expand bundles and count by category
   const skuQtys={};
-
   for(const item of lineItems){
-    const sku=item.sku; const qty=item.quantity||1;
-    if(!sku||!qty) continue;
-    // Expand bundles
+    const sku=item.sku,qty=item.quantity||1;
+    if(!sku||!qty)continue;
     if(BUNDLE_EXPAND[sku]){
-      for(const[compSku,compQty]of Object.entries(BUNDLE_EXPAND[sku])){
-        skuQtys[compSku]=(skuQtys[compSku]||0)+compQty*qty;
+      for(const[cs,cq]of Object.entries(BUNDLE_EXPAND[sku])){
+        skuQtys[cs]=(skuQtys[cs]||0)+cq*qty;
       }
     } else {
       skuQtys[sku]=(skuQtys[sku]||0)+qty;
     }
   }
 
-  // Map SKUs to categories
+  let deo=0,bottle=0,gift=0;
   for(const[sku,qty]of Object.entries(skuQtys)){
     const cat=SKU_TO_CATEGORY[sku];
-    if(cat)cats[cat]+=qty;
+    if(cat==='deodorant')deo+=qty;
+    else if(cat==='bottle')bottle+=qty;
+    else if(['scalp_scrubber','body_buffer','cooling_wipes'].includes(cat))gift+=qty;
   }
 
-  // Step 2: half boxes per category
-  const halfByType={};
-  let totalHalf=0;
-  for(const[cat,qty]of Object.entries(cats)){
-    if(!qty)continue;
-    const cap=PKG_CAPACITY[cat]||1;
-    const h=Math.ceil(qty/cap);
-    halfByType[cat]=h;
-    totalHalf+=h;
+  let halfMailers=0,normalMailers=0;
+
+  // Key rule: if any main category (deo or bottle) has >= 4 items, pack by category
+  if(deo>=4||bottle>=4){
+    // Pack deodorants separately
+    normalMailers+=Math.floor(deo/4);
+    const dRem=deo%4;
+    if(dRem>0){if(dRem<=3)halfMailers++;else normalMailers++;}
+
+    // Pack bottles separately
+    normalMailers+=Math.floor(bottle/4);
+    const bRem=bottle%4;
+    if(bRem>0){if(bRem<=3)halfMailers++;else normalMailers++;}
+
+    // Pack gifts separately
+    if(gift>0){
+      normalMailers+=Math.floor(gift/18);
+      const gRem=gift%18;
+      if(gRem>0){if(gRem<=9)halfMailers++;else normalMailers++;}
+    }
+  } else {
+    // Small order — pack everything together
+    if(deo===0&&bottle===0){
+      // Gifts only
+      if(gift===0)return{deo,bottle,gift,halfMailers:0,normalMailers:0,carton4:0,carton2:0,standalone:0};
+      if(gift<=9)halfMailers++;
+      else{normalMailers+=Math.floor(gift/18);const r=gift%18;if(r>0){if(r<=9)halfMailers++;else normalMailers++;}}
+    } else {
+      const mainItems=deo+bottle;
+      if(mainItems<=2&&gift<=4){
+        // Very small order fits in half mailer
+        halfMailers++;
+      } else {
+        // Mixed small order — pack in 1 standard (everything fits)
+        normalMailers++;
+      }
+    }
   }
 
-  // Step 3: convert to mailers
-  const normalMailers=Math.floor(totalHalf/2);
-  const halfMailers=totalHalf%2;
+  // Half mailer stock fallback: if we run out, upgrade halfs to normal mailers
+  if(halfMailerStock!==undefined&&halfMailerStock!==null&&halfMailerStock<halfMailers){
+    const overflow=halfMailers-halfMailerStock;
+    halfMailers=halfMailerStock;
+    normalMailers+=overflow;
+  }
 
-  // Step 4: group normal mailers into cartons
+  // Carton grouping for normal mailers
   const carton4=Math.floor(normalMailers/4);
   const rem4=normalMailers%4;
   const carton2=Math.floor(rem4/2);
   const standalone=rem4%2;
   const insideCartons=(carton4*4)+(carton2*2);
 
-  return{
-    cats,skuQtys,halfByType,totalHalf,
-    halfMailers,normalMailers,
-    carton4,carton2,standalone,insideCartons
-  };
+  return{deo,bottle,gift,halfMailers,normalMailers,carton4,carton2,standalone,insideCartons};
 }
 
-let pkgOrders=[];
-let pkgLoading=false;
-let pkgPeriod=7;
-
-async function loadPackagingOrders(){
-  pkgLoading=true;
-  rPackaging();
-  const domain=''+window.location.hostname.replace('stockflow-manly.vercel.app','');
-  try{
-    const r=await fetch('/api/live/shopify?days='+pkgPeriod);
-    const d=await r.json();
-    if(!r.ok||d.error)throw new Error(d.error);
-    // We need actual order line items — use the packaging API
-    const r2=await fetch('/api/live/packaging?days='+pkgPeriod);
-    const d2=await r2.json();
-    if(r2.ok&&d2.orders){
-      pkgOrders=d2.orders.map(o=>({...o,...calcPackaging(o.line_items)}));
-    }
-  }catch(e){
-    console.error('[Packaging]',e.message);
+// Test helper (remove in prod)
+function testPackaging(){
+  const tests=[
+    {label:'2deo+2btl+6gifts→1std',l:[{sku:'Dc&c-MANLY',quantity:2},{sku:'BWc&c-MANLY',quantity:2},{sku:'SCALP-MANLY',quantity:2},{sku:'BB-MANLY',quantity:2},{sku:'CW-MANLY',quantity:2}],exp:{h:0,n:1}},
+    {label:'9gifts→half',l:[{sku:'SCALP-MANLY',quantity:3},{sku:'BB-MANLY',quantity:3},{sku:'CW-MANLY',quantity:3}],exp:{h:1,n:0}},
+    {label:'1deo+1btl→half',l:[{sku:'Dc&c-MANLY',quantity:1},{sku:'BWc&c-MANLY',quantity:1}],exp:{h:1,n:0}},
+    {label:'4deo+4btl+12gifts→3std',l:[{sku:'Dc&c-MANLY',quantity:4},{sku:'BWc&c-MANLY',quantity:4},{sku:'SCALP-MANLY',quantity:4},{sku:'BB-MANLY',quantity:4},{sku:'CW-MANLY',quantity:4}],exp:{h:0,n:3}},
+    {label:'4deo+12btl→4std+quad',l:[{sku:'Dc&c-MANLY',quantity:4},{sku:'BWc&c-MANLY',quantity:12}],exp:{h:0,n:4}},
+    {label:'5btl→1std+1half',l:[{sku:'BWc&c-MANLY',quantity:5}],exp:{h:1,n:1}},
+    {label:'7btl→1std+1half',l:[{sku:'BWc&c-MANLY',quantity:7}],exp:{h:1,n:1}},
+    {label:'4btl→1std',l:[{sku:'BWc&c-MANLY',quantity:4}],exp:{h:0,n:1}},
+    {label:'2btl→1half',l:[{sku:'BWc&c-MANLY',quantity:2}],exp:{h:1,n:0}},
+    {label:'1deo+3btl→1std',l:[{sku:'Dc&c-MANLY',quantity:1},{sku:'BWc&c-MANLY',quantity:3}],exp:{h:0,n:1}},
+    {label:'1deo→half',l:[{sku:'Dc&c-MANLY',quantity:1}],exp:{h:1,n:0}},
+  ];
+  let pass=0,fail=0;
+  for(const t of tests){
+    const r=calcPackaging(t.l);
+    const ok=r.halfMailers===t.exp.h&&r.normalMailers===t.exp.n;
+    if(ok)pass++;else{fail++;console.log('FAIL',t.label,'got h='+r.halfMailers+' n='+r.normalMailers,'exp h='+t.exp.h+' n='+t.exp.n);}
   }
-  pkgLoading=false;
-  rPackaging();
+  console.log('Tests: '+pass+' pass, '+fail+' fail');
 }
 
-function rPackaging(){
-  const el=document.getElementById('tab-packaging');if(!el)return;
-
-  // Aggregate totals
-  const totals={halfMailers:0,normalMailers:0,carton4:0,carton2:0,standalone:0};
-  for(const o of pkgOrders){
-    totals.halfMailers+=o.halfMailers||0;
-    totals.normalMailers+=o.normalMailers||0;
-    totals.carton4+=o.carton4||0;
-    totals.carton2+=o.carton2||0;
-    totals.standalone+=o.standalone||0;
-  }
-
-  el.innerHTML=`
-    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
-      <div>
-        <div style="font-size:15px;font-weight:600;margin-bottom:2px">📦 Packaging Projection</div>
-        <div class="sn" style="margin:0">Based on ${pkgPeriod}-day Shopify orders. Calculated per individual order.</div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <select class="sf-sel" id="pkg-period">
-          <option value="7" ${pkgPeriod===7?'selected':''}>Last 7 days</option>
-          <option value="14" ${pkgPeriod===14?'selected':''}>Last 14 days</option>
-          <option value="30" ${pkgPeriod===30?'selected':''}>Last 30 days</option>
-        </select>
-        <button class="btn btp" onclick="loadPackagingOrders()" ${pkgLoading?'disabled':''}>
-          ${pkgLoading?'⟳ Loading…':'↻ Refresh'}
-        </button>
-      </div>
-    </div>
-
-    ${pkgOrders.length===0&&!pkgLoading?`
-      <div style="background:var(--bg2);border-radius:var(--radius-lg);padding:40px;text-align:center;color:var(--text2)">
-        <div style="font-size:32px;margin-bottom:12px">📦</div>
-        <div style="font-size:14px;font-weight:600;margin-bottom:6px">No data loaded</div>
-        <div style="font-size:13px;margin-bottom:16px">Click Refresh to load packaging projections from Shopify orders</div>
-        <button class="btn btp" onclick="loadPackagingOrders()">Load packaging data</button>
-      </div>
-    `:''}
-
-    ${pkgLoading?`<div style="text-align:center;padding:40px;color:var(--text2);font-size:13px">⟳ Loading orders and calculating packaging…</div>`:''}
-
-    ${pkgOrders.length>0?`
-    <div class="g4" style="margin-bottom:16px">
-      <div class="mc"><div class="ml">Orders analysed</div><div class="mv">${pkgOrders.length}</div><div class="ms">Last ${pkgPeriod} days</div></div>
-      <div class="mc"><div class="ml">Half Mailer Boxes</div><div class="mv">${fm(totals.halfMailers)}</div><div class="ms">Single item orders</div></div>
-      <div class="mc"><div class="ml">Standard Mailers</div><div class="mv">${fm(totals.normalMailers)}</div><div class="ms">Total used</div></div>
-      <div class="mc"><div class="ml">Cartons needed</div><div class="mv">${fm(totals.carton4+totals.carton2)}</div><div class="ms">${fm(totals.carton4)} quad + ${fm(totals.carton2)} double</div></div>
-    </div>
-
-    <div class="g2" style="margin-bottom:16px">
-      <div class="card" style="margin:0">
-        <div class="ct">Packaging summary — last ${pkgPeriod} days</div>
-        <table class="sf-t">
-          <thead><tr><th>Box type</th><th style="text-align:right">Qty used</th><th style="text-align:right">Daily avg</th></tr></thead>
-          <tbody>
-            <tr><td>🗃️ Half Mailer Box (2 items)</td><td style="text-align:right;font-weight:600">${fm(totals.halfMailers)}</td><td style="text-align:right">${(totals.halfMailers/pkgPeriod).toFixed(1)}/d</td></tr>
-            <tr><td>📦 Standard Mailer Box</td><td style="text-align:right;font-weight:600">${fm(totals.normalMailers)}</td><td style="text-align:right">${(totals.normalMailers/pkgPeriod).toFixed(1)}/d</td></tr>
-            <tr><td>📫 Double Carton (2× standard)</td><td style="text-align:right;font-weight:600">${fm(totals.carton2)}</td><td style="text-align:right">${(totals.carton2/pkgPeriod).toFixed(1)}/d</td></tr>
-            <tr><td>🏗️ Quad Carton (4× standard)</td><td style="text-align:right;font-weight:600">${fm(totals.carton4)}</td><td style="text-align:right">${(totals.carton4/pkgPeriod).toFixed(1)}/d</td></tr>
-            <tr><td style="color:var(--text2)">Standalone mailers (no carton)</td><td style="text-align:right">${fm(totals.standalone)}</td><td style="text-align:right">${(totals.standalone/pkgPeriod).toFixed(1)}/d</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="card" style="margin:0">
-        <div class="ct">Packaging breakdown by order size</div>
-        ${(()=>{
-          const dist={};
-          for(const o of pkgOrders){
-            const k=o.normalMailers===0&&o.halfMailers===1?'Half only':
-                    o.normalMailers===1&&o.halfMailers===0?'1 standard':
-                    o.normalMailers===1&&o.halfMailers===1?'1 std + half':
-                    o.normalMailers>1?o.normalMailers+' standard'+(o.halfMailers?' + half':''):'Other';
-            dist[k]=(dist[k]||0)+1;
-          }
-          return`<table class="sf-t"><thead><tr><th>Packaging used</th><th style="text-align:right">Orders</th><th style="text-align:right">%</th></tr></thead><tbody>
-            ${Object.entries(dist).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<tr><td>${k}</td><td style="text-align:right;font-weight:600">${v}</td><td style="text-align:right">${(v/pkgOrders.length*100).toFixed(1)}%</td></tr>`).join('')}
-          </tbody></table>`;
-        })()}
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="ct">Order-level breakdown <span class="bdg bmu">Last ${pkgPeriod} days · ${pkgOrders.length} orders</span></div>
-      <table class="sf-t">
-        <thead><tr>
-          <th>Order</th><th>Items</th>
-          <th style="text-align:right">Half boxes</th>
-          <th style="text-align:right">½ mailer</th>
-          <th style="text-align:right">Std mailers</th>
-          <th style="text-align:right">2× carton</th>
-          <th style="text-align:right">4× carton</th>
-        </tr></thead>
-        <tbody>
-        ${pkgOrders.slice(0,100).map(o=>`<tr>
-          <td style="font-weight:600;font-size:12px">#${o.order_number||o.order_id}</td>
-          <td style="font-size:12px;color:var(--text2)">${Object.entries(o.cats||{}).filter(([,v])=>v>0).map(([k,v])=>`${v}×${k.replace('_',' ')}`).join(', ')}</td>
-          <td style="text-align:right">${o.totalHalf}</td>
-          <td style="text-align:right">${o.halfMailers||0}</td>
-          <td style="text-align:right;font-weight:600">${o.normalMailers||0}</td>
-          <td style="text-align:right">${o.carton2||0}</td>
-          <td style="text-align:right">${o.carton4||0}</td>
-        </tr>`).join('')}
-        ${pkgOrders.length>100?`<tr><td colspan="7" style="text-align:center;padding:10px;color:var(--text2);font-size:12px">Showing first 100 of ${pkgOrders.length} orders</td></tr>`:''}
-        </tbody>
-      </table>
-    </div>
-    `:''}`;
-
-  const psel=document.getElementById('pkg-period');
-  if(psel)psel.addEventListener('change',e=>{pkgPeriod=parseInt(e.target.value);loadPackagingOrders()});
-}
-
-
-switchTab('po');
+const TABS=['overview','inventory','bundles','forecast','reorder','po','suppliers','payments','packaging'];
+const TLBLS={overview:'Overview',inventory:'Inventory',bundles:'Bundles',forecast:'Forecast',reorder:'Reorder',po:'Purchase Orders',suppliers:'Suppliers',payments:'Payments',packaging:'📦 Packaging'};
+const RFNS={overview:rOverview,inventory:rInventory,bundles:rBundles,forecast:rForecast,reorder:rReorder,po:rPO,suppliers:rSuppliers,payments:rPayments,packaging:rPackaging};
+function switchTab(t){activeTab=t;TABS.forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('active',x===t)});document.querySelectorAll('.tb').forEach(b=>b.classList.toggle('active',b.dataset.t===t));RFNS[t]?.()}
+function rActive(){RFNS[activeTab]?.()}
+document.getElementById('tnav').innerHTML=TABS.map(t=>`<button class="tb${t===activeTab?' active':''}" data-t="${t}">${TLBLS[t]}</button>`).join('');
+document.querySelectorAll('.tb').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.t)));
+switchTab(activeTab);
 </script>
 </body>
 </html>
