@@ -701,31 +701,31 @@ async function loadPackagingOrders(){
 
 function pkgRevenueCalc(){
   const rev=pkgTargetRev||0;
-  const period=pkgPeriod||7;
   if(!rev||pkgOrders.length===0)return'';
 
-  // Calculate per-order averages from loaded data
-  const totals={halfMailers:0,normalMailers:0,carton4:0,carton2:0};
-  let totalRevInPeriod=0;
-  for(const o of pkgOrders){
-    totals.halfMailers+=o.halfMailers||0;
-    totals.normalMailers+=o.normalMailers||0;
-    totals.carton4+=o.carton4||0;
-    totals.carton2+=o.carton2||0;
-    totalRevInPeriod+=(o.order_revenue||0);
-  }
+  // Use DAILY_REV from Shopify (already normalised per-day, independent of period)
+  const dailyRev=DAILY_REV>0?DAILY_REV:0;
+  if(dailyRev===0)return'<div style="color:var(--warn);font-size:13px;padding:10px 0">⚠ Connect Shopify to get revenue data for this calculator.</div>';
 
-  // Use DAILY_REV if available, else estimate from orders
-  const dailyRev=DAILY_REV>0?DAILY_REV:(totalRevInPeriod/period)||0;
-  if(dailyRev===0)return'<div style="color:var(--warn);font-size:13px">⚠ Connect Shopify to get revenue data for this calculator.</div>';
+  const daysNeeded=rev/dailyRev;
 
-  const revDays=rev/dailyRev;
-  const scale=rev/((dailyRev||1)*period);
+  // Normalise to per-order averages from the loaded sample (period-independent)
+  const n=pkgOrders.length;
+  const avgHalf=pkgOrders.reduce((s,o)=>s+(o.halfMailers||0),0)/n;
+  const avgNormal=pkgOrders.reduce((s,o)=>s+(o.normalMailers||0),0)/n;
+  const avgC4=pkgOrders.reduce((s,o)=>s+(o.carton4||0),0)/n;
+  const avgC2=pkgOrders.reduce((s,o)=>s+(o.carton2||0),0)/n;
 
-  const projHalf=Math.round(totals.halfMailers*scale);
-  const projNormal=Math.round(totals.normalMailers*scale);
-  const projC4=Math.round(totals.carton4*scale);
-  const projC2=Math.round(totals.carton2*scale);
+  // Estimated orders needed = target revenue / avg order value
+  // avg order value = (daily rev * period) / orders in sample
+  const periodRev=dailyRev*pkgPeriod;
+  const avgOrderValue=n>0?periodRev/n:0;
+  const ordersNeeded=avgOrderValue>0?rev/avgOrderValue:0;
+
+  const projHalf=Math.round(avgHalf*ordersNeeded);
+  const projNormal=Math.round(avgNormal*ordersNeeded);
+  const projC4=Math.round(avgC4*ordersNeeded);
+  const projC2=Math.round(avgC2*ordersNeeded);
 
   return`<div class="card" style="margin-bottom:16px">
     <div class="ct">Revenue packaging calculator</div>
@@ -734,15 +734,16 @@ function pkgRevenueCalc(){
         <div style="font-size:13px;color:var(--text2);margin-bottom:6px">Target revenue ($)</div>
         <input class="ri" id="pkg-rev-input" type="number" value="${pkgTargetRev}" min="0" step="10000" style="width:100%">
       </div>
-      <div style="display:flex;flex-direction:column;justify-content:flex-end">
-        <div style="font-size:12px;color:var(--text2)">Based on ${period}-day avg · $${fm(Math.round(dailyRev))}/day · ~${Math.round(revDays)} days at current velocity</div>
+      <div style="display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:6px">
+        <div style="font-size:12px;color:var(--text2)">$${fm(Math.round(dailyRev))}/day · ~${Math.round(daysNeeded)} days · ~${fm(Math.round(ordersNeeded))} orders</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">Based on ${pkgPeriod}-day avg · ${n} orders sampled</div>
       </div>
     </div>
     <div class="g4">
-      <div class="mc"><div class="ml">Half Mailer Boxes</div><div class="mv">${fm(projHalf)}</div><div class="ms">${dailyRev>0?(projHalf/revDays).toFixed(1)+'/d':''}</div></div>
-      <div class="mc"><div class="ml">Standard Mailers</div><div class="mv">${fm(projNormal)}</div><div class="ms">${dailyRev>0?(projNormal/revDays).toFixed(1)+'/d':''}</div></div>
-      <div class="mc"><div class="ml">Double Cartons (2×)</div><div class="mv">${fm(projC2)}</div><div class="ms">${dailyRev>0?(projC2/revDays).toFixed(1)+'/d':''}</div></div>
-      <div class="mc"><div class="ml">Quad Cartons (4×)</div><div class="mv">${fm(projC4)}</div><div class="ms">${dailyRev>0?(projC4/revDays).toFixed(1)+'/d':''}</div></div>
+      <div class="mc"><div class="ml">Half Mailer Boxes</div><div class="mv">${fm(projHalf)}</div><div class="ms">${(projHalf/daysNeeded).toFixed(1)}/d</div></div>
+      <div class="mc"><div class="ml">Standard Mailers</div><div class="mv">${fm(projNormal)}</div><div class="ms">${(projNormal/daysNeeded).toFixed(1)}/d</div></div>
+      <div class="mc"><div class="ml">Double Cartons (2×)</div><div class="mv">${fm(projC2)}</div><div class="ms">${(projC2/daysNeeded).toFixed(1)}/d</div></div>
+      <div class="mc"><div class="ml">Quad Cartons (4×)</div><div class="mv">${fm(projC4)}</div><div class="ms">${(projC4/daysNeeded).toFixed(1)}/d</div></div>
     </div>
   </div>`;
 }
