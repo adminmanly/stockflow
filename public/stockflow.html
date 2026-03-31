@@ -370,44 +370,51 @@ function rForecast(){
 }
 function uReorder(){
   const el=document.getElementById('rr');if(!el)return;
-
   const hasData=Object.keys(AVG_PRICE).length>0;
   const hasCogs=Object.keys(COGS).length>0;
-
-  // Real daily revenue from Shopify (total order revenue / 30 days)
   const currentDailyRev=DAILY_REV_30||0;
+
+  // Revenue target logic:
+  // Each SKU contributes (velocity * avgPrice) to daily revenue
+  // To hit target revenue over tDays: each SKU needs (its revenue share / avgPrice) units
+  const totalDailyRevFromSkus=ALL_TRACK.reduce((s,p)=>{
+    const dl=(DAILY.tw?.[p]??0)+(DAILY.vi?.[p]??0);
+    const avgP=AVG_PRICE[p]>0?AVG_PRICE[p]:(PRICES[p]??0);
+    return s+dl*avgP;
+  },0);
+
+  // Scale factor: if target is 2x current daily rev, need 2x units
+  const scaleFactor=tRev>0&&totalDailyRevFromSkus>0?(tRev/tDays)/totalDailyRevFromSkus:1;
 
   const allRows=ALL_TRACK.map(p=>{
     const dlUS=DAILY.tw?.[p]??0,dlAU=DAILY.vi?.[p]??0,dlTot=dlUS+dlAU;
-    // Use real avg price from orders (includes bundle revenue attribution)
     const avgP=AVG_PRICE[p]>0?AVG_PRICE[p]:(PRICES[p]??0);
     const costP=COGS[p]??0;
     const crUS=STOCK.tw?.[p]??0,crAU=STOCK.vi?.[p]??0,crTot=crUS+crAU;
-    // Units needed based on velocity * days (not revenue target)
-    const nd=Math.ceil(dlTot*tDays);
+    // Units needed = scaled velocity * days
+    const nd=Math.ceil(dlTot*scaleFactor*tDays);
     const tb=Math.max(0,nd-crTot);
     const cg=tb*costP;
     const gift=GIFT_P.includes(p);
-    // Revenue contribution of this SKU per day
     const dailyRevShare=dlTot*avgP;
     return{p,dlUS,dlAU,dlTot,avgP,costP,nd,crTot,crUS,crAU,tb,cg,gift,dailyRevShare}
   });
 
   const totalCogs=allRows.reduce((s,r)=>s+r.cg,0);
-  const projectedRev=allRows.reduce((s,r)=>s+r.dlTot*r.avgP*tDays,0);
+  const projectedRev=currentDailyRev*tDays;
 
   el.innerHTML=`
-    ${!hasData?'<div style="background:var(--warnbg);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--warn)">⚠ Connect Shopify to load real avg selling prices and COGS from your orders.</div>':''}
+    ${!hasData?'<div style="background:var(--warnbg);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--warn)">⚠ Connect Shopify to load real avg prices and COGS.</div>':''}
     <div class="g4" style="margin-bottom:14px">
-      <div class="mc"><div class="ml">Actual daily revenue</div><div class="mv">$${fm(currentDailyRev)}</div><div class="ms">30-day avg from Shopify</div></div>
+      <div class="mc"><div class="ml">Actual daily revenue</div><div class="mv">$${fm(currentDailyRev)}</div><div class="ms">30-day avg from all orders</div></div>
       <div class="mc"><div class="ml">Projected over ${tDays}d</div><div class="mv">$${fm(projectedRev)}</div><div class="ms">At current velocity</div></div>
-      <div class="mc"><div class="ml">Total daily units</div><div class="mv">${allRows.reduce((s,r)=>s+r.dlTot,0).toFixed(0)}</div><div class="ms">All products</div></div>
+      <div class="mc"><div class="ml">Revenue target</div><div class="mv">$${fm(tRev)}</div><div class="ms">Over ${tDays} days</div></div>
       <div class="mc"><div class="ml">Est. COGS to order</div><div class="mv">$${fm(totalCogs)}</div><div class="ms">${hasCogs?'From Shopify cost fields':'Add costs in Shopify'}</div></div>
     </div>
     <div class="card">
       <div class="ct">
-        Units needed for next ${tDays} days
-        <span class="bdg bmu">Based on real avg selling price per unit incl. bundles</span>
+        Units needed to hit $${fm(tRev)} over ${tDays} days
+        ${scaleFactor>1?`<span class="bdg bwn">${scaleFactor.toFixed(1)}× scale-up needed</span>`:'<span class="bdg bok">On track</span>'}
       </div>
       <table class="sf-t"><thead><tr>
         <th>Product</th><th>Type</th>
@@ -428,7 +435,7 @@ function uReorder(){
         <td style="text-align:right">${r.avgP?'$'+r.avgP.toFixed(2):'—'}</td>
         <td style="text-align:right">${r.costP?'$'+r.costP.toFixed(2):'—'}</td>
         <td style="text-align:right">$${fm(r.dailyRevShare)}</td>
-        <td style="text-align:right">${r.nd||'—'}</td>
+        <td style="text-align:right;font-weight:600">${r.nd||'—'}</td>
         <td style="text-align:right;font-weight:600;${r.tb?'color:var(--blue)':''}">${r.tb?'+'+fm(r.tb):'✓'}</td>
         <td style="text-align:right">${r.tb&&r.costP?'$'+fm(r.cg):'—'}</td>
       </tr>`).join('')}
