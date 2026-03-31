@@ -42,6 +42,8 @@ export default async function handler(req, res) {
 
     const itemToSku = {}
     const skuToItemId = {}
+    const cogsBySku = {}  // cost per item from Shopify variant
+
     for (const p of prodData.products) {
       for (const v of p.variants) {
         if (v.sku && v.inventory_item_id) {
@@ -51,51 +53,46 @@ export default async function handler(req, res) {
       }
     }
 
-    const locations = locData.locations.filter(l => l.active)
-    const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
-
-    // Try fetching inventory using item IDs directly (not location filter)
-    // Use the 4 known working item IDs first as a test
-    const allItemIds = Object.keys(SKU_MAP).map(s => skuToItemId[s]).filter(Boolean)
-    
-    let invStatus = 'not attempted'
-    let invBody = null
-    const auStockBySku = {}
-
-    if (auLocation && allItemIds.length > 0) {
-      // Try with inventory_item_ids filter
-      const invUrl = `${BASE}/inventory_levels.json?location_id=${auLocation.id}&inventory_item_ids=${allItemIds.join(',')}&limit=250`
-      const invRes = await fetch(invUrl, { headers: HEADERS })
-      invStatus = invRes.status
-      
-      if (invRes.ok) {
-        const invData = await invRes.json()
-        invBody = invData.inventory_levels?.length
-for (const level of invData.inventory_levels || []) {
-  if (String(level.location_id) !== String(auLocation.id)) continue
-  const sku = itemToSku[String(level.inventory_item_id)]
-  if (!sku) continue
-  auStockBySku[sku] = Math.max(0, level.available || 0)
-}
-      } else {
-        // Try without location filter — just by item IDs
-        const invRes2 = await fetch(`${BASE}/inventory_levels.json?inventory_item_ids=${allItemIds.join(',')}&limit=250`, { headers: HEADERS })
-        if (invRes2.ok) {
-          const invData2 = await invRes2.json()
-          // Find the AU location's levels
-          for (const level of invData2.inventory_levels || []) {
-            if (String(level.location_id) !== String(auLocation.id)) continue
-            const sku = itemToSku[String(level.inventory_item_id)]
-            if (!sku) continue
-            auStockBySku[sku] = Math.max(0, level.available || 0)
-          }
+    // Fetch COGS from inventory items API (has cost data)
+    const trackedItemIdsList = Object.keys(SKU_MAP).map(s => skuToItemId[s]).filter(Boolean)
+    if (trackedItemIdsList.length > 0) {
+      const cogsRes = await fetch(
+        `${BASE}/inventory_items.json?ids=${trackedItemIdsList.join(',')}&limit=250`,
+        { headers: HEADERS }
+      )
+      if (cogsRes.ok) {
+        const cogsData = await cogsRes.json()
+        for (const item of cogsData.inventory_items || []) {
+          const sku = itemToSku[String(item.id)]
+          if (sku && item.cost) cogsBySku[sku] = parseFloat(item.cost)
         }
       }
     }
 
-    // Process orders
+    const locations = locData.locations.filter(l => l.active)
+    const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
+
+    const auStockBySku = {}
+    if (auLocation && trackedItemIdsList.length > 0) {
+      const invRes = await fetch(
+        `${BASE}/inventory_levels.json?location_id=${auLocation.id}&inventory_item_ids=${trackedItemIdsList.join(',')}&limit=250`,
+        { headers: HEADERS }
+      )
+      if (invRes.ok) {
+        const invData = await invRes.json()
+        for (const level of invData.inventory_levels || []) {
+          if (String(level.location_id) !== String(auLocation.id)) continue
+          const sku = itemToSku[String(level.inventory_item_id)]
+          if (!sku) continue
+          auStockBySku[sku] = Math.max(0, level.available || 0)
+        }
+      }
+    }
+
+    // Process orders — track velocity, country split, AND revenue per SKU for avg price
     const soldBySkuUS = {}
     const soldBySkuAU = {}
+    const revBySku = {}   // total revenue per SKU (non-$0 lines only)
     let totalOrders = 0
     let pageCount = 0
     let currentRes = firstOrdersRes
@@ -109,14 +106,22 @@ for (const level of invData.inventory_levels || []) {
       for (const order of ordersData.orders || []) {
         const country = order.shipping_address?.country_code || 'US'
         const isAU = country === 'AU'
+
         for (const item of order.line_items) {
           if (!item.sku || !TRACKED_SKUS.has(item.sku)) continue
-          if (!parseFloat(item.price)) continue
+          const price = parseFloat(item.price)
+          if (!price) continue  // skip $0 bundle additions
+
           if (isAU) {
             soldBySkuAU[item.sku] = (soldBySkuAU[item.sku] || 0) + item.quantity
           } else {
             soldBySkuUS[item.sku] = (soldBySkuUS[item.sku] || 0) + item.quantity
           }
+
+          // Track revenue for avg price calculation (both regions)
+          if (!revBySku[item.sku]) revBySku[item.sku] = { rev: 0, qty: 0 }
+          revBySku[item.sku].rev += price * item.quantity
+          revBySku[item.sku].qty += item.quantity
         }
       }
 
@@ -125,14 +130,24 @@ for (const level of invData.inventory_levels || []) {
       currentRes = nextMatch ? await fetch(nextMatch[1], { headers: HEADERS }) : null
     }
 
+    // Build response
     const auStockByProduct = {}
     const velocityUSByProduct = {}
     const velocityAUByProduct = {}
+    const avgPriceByProduct = {}
+    const cogsByProduct = {}
 
     for (const [sku, productName] of Object.entries(SKU_MAP)) {
       auStockByProduct[productName] = auStockBySku[sku] || 0
       velocityUSByProduct[productName] = +((soldBySkuUS[sku] || 0) / 30).toFixed(1)
       velocityAUByProduct[productName] = +((soldBySkuAU[sku] || 0) / 30).toFixed(1)
+
+      // Avg selling price from actual orders
+      const rv = revBySku[sku]
+      avgPriceByProduct[productName] = rv?.qty > 0 ? +(rv.rev / rv.qty).toFixed(2) : 0
+
+      // COGS from Shopify inventory items
+      cogsByProduct[productName] = cogsBySku[sku] || 0
     }
 
     return res.json({
@@ -141,17 +156,11 @@ for (const level of invData.inventory_levels || []) {
       au_stock: auStockByProduct,
       velocity_us: velocityUSByProduct,
       velocity_au: velocityAUByProduct,
+      avg_price: avgPriceByProduct,    // real avg selling price per SKU from orders
+      cogs: cogsByProduct,             // cost per unit from Shopify
       au_location: auLocation?.name || 'not found',
-      au_location_id: auLocation?.id,
       orders_analysed: totalOrders,
       period_days: 30,
-      debug: {
-        skus_mapped: Object.keys(skuToItemId).length,
-        item_ids: allItemIds,
-        inv_api_status: invStatus,
-        inv_levels_count: invBody,
-        au_stock_found: Object.keys(auStockBySku).length
-      }
     })
 
   } catch (err) {
