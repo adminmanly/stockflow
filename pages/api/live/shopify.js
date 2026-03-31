@@ -12,6 +12,10 @@ export default async function handler(req, res) {
   const BASE = `https://${domain}/admin/api/2024-04`
   const HEADERS = { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' }
 
+  // Accept ?days=7|14|30 — default 30
+  const days = parseInt(req.query?.days) || 30
+  const validDays = [7, 14, 30].includes(days) ? days : 30
+
   const SKU_MAP = {
     'BWc&c-MANLY': 'Body Wash',
     'Dc&c-MANLY': 'Deodorant',
@@ -40,18 +44,18 @@ export default async function handler(req, res) {
   }
 
   try {
-    const since30 = new Date()
-    since30.setDate(since30.getDate() - 30)
+    const sinceDate = new Date()
+    sinceDate.setDate(sinceDate.getDate() - validDays)
 
-    // Step 1: products, locations, first orders page — all parallel
+    // Step 1: products, locations, first orders — all parallel
     const [prodRes, locRes, firstOrdersRes] = await Promise.all([
       fetch(`${BASE}/products.json?limit=250`, { headers: HEADERS }),
       fetch(`${BASE}/locations.json`, { headers: HEADERS }),
-      fetch(`${BASE}/orders.json?status=any&financial_status=paid&created_at_min=${since30.toISOString()}&limit=250&fields=id,total_price,line_items,shipping_address`, { headers: HEADERS })
+      fetch(`${BASE}/orders.json?status=any&financial_status=paid&created_at_min=${sinceDate.toISOString()}&limit=250&fields=id,total_price,line_items,shipping_address`, { headers: HEADERS })
     ])
 
-    if (!prodRes.ok) throw new Error(`products error: ${prodRes.status}`)
-    if (!locRes.ok) throw new Error(`locations error: ${locRes.status}`)
+    if (!prodRes.ok) throw new Error(`products ${prodRes.status}`)
+    if (!locRes.ok) throw new Error(`locations ${locRes.status}`)
 
     const [prodData, locData] = await Promise.all([prodRes.json(), locRes.json()])
 
@@ -70,7 +74,7 @@ export default async function handler(req, res) {
     const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
     const trackedItemIds = Object.keys(SKU_MAP).map(s => skuToItemId[s]).filter(Boolean)
 
-    // Step 2: COGS + AU stock in parallel (while orders paginate)
+    // Step 2: COGS + AU stock in parallel
     const [cogsRes, invRes] = await Promise.all([
       trackedItemIds.length > 0
         ? fetch(`${BASE}/inventory_items.json?ids=${trackedItemIds.join(',')}&limit=250`, { headers: HEADERS })
@@ -80,21 +84,19 @@ export default async function handler(req, res) {
         : Promise.resolve(null)
     ])
 
-    // Process COGS
     const cogsBySku = {}
     if (cogsRes?.ok) {
-      const cogsData = await cogsRes.json()
-      for (const item of cogsData.inventory_items || []) {
+      const d = await cogsRes.json()
+      for (const item of d.inventory_items || []) {
         const sku = itemToSku[String(item.id)]
         if (sku && item.cost) cogsBySku[sku] = parseFloat(item.cost)
       }
     }
 
-    // Process AU stock
     const auStockBySku = {}
     if (invRes?.ok) {
-      const invData = await invRes.json()
-      for (const level of invData.inventory_levels || []) {
+      const d = await invRes.json()
+      for (const level of d.inventory_levels || []) {
         if (String(level.location_id) !== String(auLocation.id)) continue
         const sku = itemToSku[String(level.inventory_item_id)]
         if (!sku) continue
@@ -102,7 +104,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // Step 3: Process all orders with pagination
+    // Step 3: Process all orders
     const soldBySkuUS = {}
     const soldBySkuAU = {}
     const revBySku = {}
@@ -128,7 +130,6 @@ export default async function handler(req, res) {
           const sku = item.sku
           if (!sku || !price) continue
 
-          // Direct SKU sale
           if (TRACKED_SKUS.has(sku)) {
             if (isAU) soldBySkuAU[sku] = (soldBySkuAU[sku] || 0) + qty
             else soldBySkuUS[sku] = (soldBySkuUS[sku] || 0) + qty
@@ -137,7 +138,6 @@ export default async function handler(req, res) {
             revBySku[sku].qty += qty
           }
 
-          // Bundle — distribute revenue equally across components
           if (BUNDLE_COMPONENTS[sku]) {
             const comps = BUNDLE_COMPONENTS[sku]
             const revPerComp = (price * qty) / comps.length
@@ -160,33 +160,34 @@ export default async function handler(req, res) {
     const auStockByProduct = {}
     const velocityUSByProduct = {}
     const velocityAUByProduct = {}
+    const unitsSoldByProduct = {}
     const avgPriceByProduct = {}
     const cogsByProduct = {}
 
     for (const [sku, productName] of Object.entries(SKU_MAP)) {
       auStockByProduct[productName] = auStockBySku[sku] || 0
-      velocityUSByProduct[productName] = +((soldBySkuUS[sku] || 0) / 30).toFixed(1)
-      velocityAUByProduct[productName] = +((soldBySkuAU[sku] || 0) / 30).toFixed(1)
+      velocityUSByProduct[productName] = +((soldBySkuUS[sku] || 0) / validDays).toFixed(1)
+      velocityAUByProduct[productName] = +((soldBySkuAU[sku] || 0) / validDays).toFixed(1)
+      unitsSoldByProduct[productName] = (soldBySkuUS[sku] || 0) + (soldBySkuAU[sku] || 0)
       const rv = revBySku[sku]
       avgPriceByProduct[productName] = rv?.qty > 0 ? +(rv.rev / rv.qty).toFixed(2) : 0
       cogsByProduct[productName] = cogsBySku[sku] || 0
     }
 
-    const dailyRev = +(totalRevenue / 30).toFixed(2)
-
     return res.json({
       ok: true,
       source: 'shopify',
+      period_days: validDays,
       au_stock: auStockByProduct,
       velocity_us: velocityUSByProduct,
       velocity_au: velocityAUByProduct,
-      avg_price: avgPriceByProduct,
-      cogs: cogsByProduct,
-      daily_revenue_30d: dailyRev,
-      total_revenue_30d: +totalRevenue.toFixed(2),
+      units_sold: unitsSoldByProduct,      // total units sold in period
+      avg_price: avgPriceByProduct,         // real avg selling price incl bundle attribution
+      cogs: cogsByProduct,                  // from Shopify cost fields
+      total_revenue: +totalRevenue.toFixed(2),
+      daily_revenue: +(totalRevenue / validDays).toFixed(2),
       au_location: auLocation?.name || 'not found',
       orders_analysed: totalOrders,
-      period_days: 30,
     })
 
   } catch (err) {
