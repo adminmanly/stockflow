@@ -99,6 +99,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div id="tab-suppliers" class="tab-content"></div>
 <div id="tab-payments" class="tab-content"></div>
 <div id="tab-packaging" class="tab-content"></div>
+<div id="tab-boxes" class="tab-content"></div>
 </div>
 <script>
 var VELOCITY_PERIOD=30;
@@ -846,9 +847,170 @@ function rPackaging(){
   });
 }
 
-const TABS=['overview','inventory','bundles','forecast','reorder','po','suppliers','payments','packaging'];
-const TLBLS={overview:'Overview',inventory:'Inventory',bundles:'Bundles',forecast:'Forecast',reorder:'Reorder',po:'Purchase Orders',suppliers:'Suppliers',payments:'Payments',packaging:'📦 Packaging'};
-const RFNS={overview:rOverview,inventory:rInventory,bundles:rBundles,forecast:rForecast,reorder:rReorder,po:rPO,suppliers:rSuppliers,payments:rPayments,packaging:rPackaging};
+const TABS=['overview','inventory','bundles','forecast','reorder','po','suppliers','payments','packaging','boxes'];
+const TLBLS={overview:'Overview',inventory:'Inventory',bundles:'Bundles',forecast:'Forecast',reorder:'Reorder',po:'Purchase Orders',suppliers:'Suppliers',payments:'Payments',packaging:'📦 Packaging',boxes:'📬 Box Tracker'};
+const RFNS={overview:rOverview,inventory:rInventory,bundles:rBundles,forecast:rForecast,reorder:rReorder,po:rPO,suppliers:rSuppliers,payments:rPayments,packaging:rPackaging,boxes:rBoxTracker};
+// ─── MAILER BOX TRACKER ──────────────────────────────────────────────────────
+
+const BOX_TYPES = [
+  { id:'MB-HALF',  name:'Half Mailer Box',          desc:'Fits ~2 items' },
+  { id:'MB-STD',   name:'Standard Mailer Box',       desc:'4 bottles + 3 gifts' },
+  { id:'MB-DBL',   name:'Double Carton (2× std)',    desc:'Holds 2 standard mailers' },
+  { id:'MB-QUAD',  name:'Quad Carton (4× std)',      desc:'Holds 4 standard mailers' },
+  { id:'PKG-PEANUTS', name:'Packing Peanuts',        desc:'Bags' },
+];
+
+// Load/save manual stock adjustments from localStorage
+function loadBoxStock() {
+  try { return JSON.parse(localStorage.getItem('sf_box_stock') || 'null') || {}; }
+  catch(e) { return {}; }
+}
+function saveBoxStock(data) {
+  try { localStorage.setItem('sf_box_stock', JSON.stringify(data)); } catch(e) {}
+}
+let BOX_STOCK = loadBoxStock();
+
+// Get inbound boxes from POs (status = ordered/in transit/partial)
+function boxesInbound() {
+  const inb = {};
+  for (const bo of BOX_TYPES) inb[bo.id] = 0;
+  for (const po of POS) {
+    if (['completed','cancelled'].includes(po.status)) continue;
+    for (const line of po.lines || []) {
+      if (inb[line.p] !== undefined) inb[line.p] += line.qty || 0;
+    }
+  }
+  return inb;
+}
+
+// Get boxes consumed from packaging calculation (uses pkgOrders)
+function boxesConsumed() {
+  const used = {};
+  for (const bo of BOX_TYPES) used[bo.id] = 0;
+  for (const o of pkgOrders) {
+    used['MB-HALF']  += o.halfMailers   || 0;
+    used['MB-STD']   += o.normalMailers || 0;
+    used['MB-DBL']   += o.carton2       || 0;
+    used['MB-QUAD']  += o.carton4       || 0;
+  }
+  return used;
+}
+
+function rBoxTracker() {
+  const el = document.getElementById('tab-boxes');
+  if (!el) return;
+
+  const inb  = boxesInbound();
+  const used = boxesConsumed();
+  const hasPkgData = pkgOrders.length > 0;
+
+  const rows = BOX_TYPES.map(bo => {
+    const onHand  = BOX_STOCK[bo.id] || 0;
+    const inbound = inb[bo.id] || 0;
+    const consumed = used[bo.id] || 0;
+    const dailyUse = hasPkgData ? +(consumed / pkgPeriod).toFixed(1) : 0;
+    const remaining = onHand - consumed;
+    const total = onHand + inbound;
+    const daysLeft = dailyUse > 0 ? Math.floor(remaining / dailyUse) : null;
+    const status = daysLeft === null ? null : daysLeft <= 7 ? 'critical' : daysLeft <= 14 ? 'watch' : 'good';
+    return { bo, onHand, inbound, consumed, dailyUse, remaining, total, daysLeft, status };
+  });
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:2px">📬 Mailer Box Tracker</div>
+        <div class="sn" style="margin:0">Enter current stock on hand. Consumption is pulled from the Packaging tab (${pkgPeriod}-day window).</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        ${!hasPkgData ? `<button class="btn" onclick="switchTab('packaging')">⚠ Load packaging data first</button>` : ''}
+        <button class="btn btp" onclick="openBoxStockEditor()">✏ Update stock on hand</button>
+      </div>
+    </div>
+
+    ${!hasPkgData ? `<div style="background:var(--warnbg);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;font-size:13px;color:var(--warn)">
+      ⚠ Go to the Packaging tab and click Refresh to load consumption data first.
+    </div>` : ''}
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="ct">Box stock levels <span class="bdg bmu">${pkgPeriod}-day consumption</span></div>
+      <table class="sf-t">
+        <thead><tr>
+          <th>Box type</th>
+          <th style="text-align:right">On hand</th>
+          <th style="text-align:right">Inbound (POs)</th>
+          <th style="text-align:right">Total avail.</th>
+          <th style="text-align:right">Used (${pkgPeriod}d)</th>
+          <th style="text-align:right">Daily use</th>
+          <th style="text-align:right">Remaining</th>
+          <th style="text-align:right">Days left</th>
+          <th style="text-align:right">Status</th>
+        </tr></thead>
+        <tbody>
+        ${rows.map(r => `<tr>
+          <td>
+            <div style="font-weight:600;font-size:13px">${r.bo.name}</div>
+            <div style="font-size:11px;color:var(--text2)">${r.bo.desc}</div>
+          </td>
+          <td style="text-align:right">${fm(r.onHand)}</td>
+          <td style="text-align:right;color:var(--blue)">${r.inbound ? '+'+fm(r.inbound) : '—'}</td>
+          <td style="text-align:right;font-weight:600">${fm(r.total)}</td>
+          <td style="text-align:right">${hasPkgData ? fm(r.consumed) : '—'}</td>
+          <td style="text-align:right">${hasPkgData && r.dailyUse ? r.dailyUse+'/d' : '—'}</td>
+          <td style="text-align:right;font-weight:600;${r.remaining < 0 ? 'color:var(--red)' : ''}">${hasPkgData ? fm(r.remaining) : '—'}</td>
+          <td style="text-align:right;font-weight:600">${r.daysLeft !== null ? r.daysLeft+'d' : '—'}</td>
+          <td style="text-align:right">${r.status ? `<span class="bdg ${r.status==='critical'?'brd':r.status==='watch'?'bwn':'bok'}">${r.status==='critical'?'Critical':r.status==='watch'?'Watch':'Good'}</span>` : '<span style="color:var(--text3)">—</span>'}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="ct">Projected depletion — at current daily use</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+        ${rows.filter(r=>r.dailyUse>0).map(r=>{
+          const depDate = r.daysLeft !== null ? new Date(Date.now()+r.daysLeft*86400000).toLocaleDateString('en-AU',{day:'numeric',month:'short'}) : null;
+          return `<div style="background:var(--bg2);border-radius:var(--radius);padding:14px">
+            <div style="font-size:12px;color:var(--text2);margin-bottom:4px">${r.bo.name}</div>
+            <div style="font-size:22px;font-weight:700;${r.daysLeft!==null&&r.daysLeft<=7?'color:var(--red)':r.daysLeft!==null&&r.daysLeft<=14?'color:var(--warn)':''}">${r.daysLeft !== null ? r.daysLeft+'d' : '—'}</div>
+            ${depDate ? `<div style="font-size:11px;color:var(--text2);margin-top:2px">Runs out ~${depDate}</div>` : ''}
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">${fm(r.remaining)} left · ${r.dailyUse}/d</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+function openBoxStockEditor() {
+  const rows = BOX_TYPES.map(bo => `
+    <div style="display:grid;grid-template-columns:1fr 120px;gap:12px;align-items:center;margin-bottom:10px">
+      <div>
+        <div style="font-size:13px;font-weight:600">${bo.name}</div>
+        <div style="font-size:11px;color:var(--text2)">${bo.desc}</div>
+      </div>
+      <input class="ri" type="number" id="box-stock-${bo.id}" value="${BOX_STOCK[bo.id]||0}" min="0" style="text-align:right">
+    </div>`).join('');
+
+  openM(`<div class="ct">Update stock on hand</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:14px">Enter your current physical stock count for each box type.</div>
+    ${rows}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button class="btn" onclick="closeM()">Cancel</button>
+      <button class="btn btp" onclick="saveBoxStockEdit()">Save</button>
+    </div>`);
+}
+
+function saveBoxStockEdit() {
+  for (const bo of BOX_TYPES) {
+    const val = parseInt(document.getElementById('box-stock-'+bo.id)?.value) || 0;
+    BOX_STOCK[bo.id] = val;
+  }
+  saveBoxStock(BOX_STOCK);
+  closeM();
+  rBoxTracker();
+}
+
+
 function switchTab(t){activeTab=t;TABS.forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('active',x===t)});document.querySelectorAll('.tb').forEach(b=>b.classList.toggle('active',b.dataset.t===t));RFNS[t]?.()}
 function rActive(){RFNS[activeTab]?.()}
 document.getElementById('tnav').innerHTML=TABS.map(t=>`<button class="tb${t===activeTab?' active':''}" data-t="${t}">${TLBLS[t]}</button>`).join('');
