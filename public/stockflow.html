@@ -853,6 +853,9 @@ function switchTab(t){activeTab=t;TABS.forEach(x=>{const el=document.getElementB
 function rActive(){RFNS[activeTab]?.()}
 document.getElementById('tnav').innerHTML=TABS.map(t=>`<button class="tb${t===activeTab?' active':''}" data-t="${t}">${TLBLS[t]}</button>`).join('');
 document.querySelectorAll('.tb').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.t)));
+document.getElementById('tab-packaging').addEventListener('input',e=>{
+  if(e.target.id==='pkg-rev-input'){pkgTargetRev=parseInt(e.target.value)||0;updatePkgRevCalc();}
+});
 switchTab(activeTab);
 </script>
 </body>
