@@ -115,7 +115,7 @@ let nSup=3;
 const INV_FILES={};
 let POS=[];
 let nPO=1,lineCtx=200,pof={sup:'',fc:'',st:'',df:'',dt:'',prods:[]},aFC='tw',gMode='30',csFrom='',csTo='',tRev=50000,tDays=60,activeTab='po',modalPayments=[],lineIds=[];
-const STOCK={tw:{},vi:{}};
+const STOCK={tw:{},vi:{}};const AVG_PRICE={};const COGS={};
 const DAILY={tw:{},vi:{}};
 let shConnected=false,skConnected=false;
 const sup=id=>SUPPLIERS.find(s=>s.id===id)||{name:'Unknown',email:'',addr:'',terms:{deposit:30,port:0,receipt:70},currency:'AUD',payTerms:'',bankName:'',bankAcct:''};
@@ -163,6 +163,8 @@ async function syncShopify(btn){
     if(d.au_stock){for(const[product,qty]of Object.entries(d.au_stock)){STOCK.vi[product]=qty}}
     if(d.velocity_us){if(!DAILY.tw)DAILY.tw={};for(const[product,vel]of Object.entries(d.velocity_us)){DAILY.tw[product]=vel}}
     if(d.velocity_au){if(!DAILY.vi)DAILY.vi={};for(const[product,vel]of Object.entries(d.velocity_au)){DAILY.vi[product]=vel}}
+    if(d.avg_price){for(const[product,price]of Object.entries(d.avg_price)){AVG_PRICE[product]=price}}
+    if(d.cogs){for(const[product,cost]of Object.entries(d.cogs)){COGS[product]=cost}}
     skConnected=true;
     btn.textContent='● Shopify';btn.style.color='var(--green)';btn.disabled=false;
     rActive();
@@ -366,13 +368,64 @@ function rForecast(){
   if(gt)gt.addEventListener('change',e=>{csTo=e.target.value;if(csFrom&&csTo)rForecast()});
 }
 function uReorder(){
-  const totD=CORE_P.reduce((s,p)=>s+(DAILY.tw?.[p]??0)+(DAILY.vi?.[p]??0),0)*(Object.values(PRICES).reduce((a,b)=>a+b,0)/Object.values(PRICES).length||30);
-  const rows=CORE_P.map(p=>{const dlUS=DAILY.tw?.[p]??0,dlAU=DAILY.vi?.[p]??0,dlTot=dlUS+dlAU;const nd=Math.ceil(dlTot*tDays);const crUS=STOCK.tw?.[p]??0,crAU=STOCK.vi?.[p]??0,crTot=crUS+crAU;const tb=Math.max(0,nd-crTot);const cg=tb*(PRICES[p]??0)*0.35;return{p,dlTot,nd,crTot,crUS,crAU,tb,cg}});
   const el=document.getElementById('rr');if(!el)return;
-  const totalCogs=rows.reduce((s,r)=>s+r.cg,0);
-  el.innerHTML=`<div class="g4" style="margin-bottom:14px"><div class="mc"><div class="ml">Target revenue</div><div class="mv">$${fm(tRev)}</div></div><div class="mc"><div class="ml">Over days</div><div class="mv">${tDays}d</div></div><div class="mc"><div class="ml">Daily velocity (total)</div><div class="mv">${rows.reduce((s,r)=>s+r.dlTot,0).toFixed(0)} units</div></div><div class="mc"><div class="ml">Est. COGS to order</div><div class="mv">$${fm(totalCogs)}</div><div class="ms">At 35% COGS</div></div></div>
-  <div class="card"><table class="sf-t"><thead><tr><th>Product</th><th style="text-align:right">US stock</th><th style="text-align:right">AU stock</th><th style="text-align:right">Total stock</th><th style="text-align:right">US daily</th><th style="text-align:right">AU daily</th><th style="text-align:right">Needed (${tDays}d)</th><th style="text-align:right">To buy</th><th style="text-align:right">Est. COGS</th></tr></thead><tbody>${rows.map(r=>`<tr><td style="font-weight:600">${r.p}</td><td style="text-align:right">${fm(r.crUS)}</td><td style="text-align:right">${fm(r.crAU)}</td><td style="text-align:right">${fm(r.crTot)}</td><td style="text-align:right">${r.dlTot>0?(DAILY.tw?.[r.p]??0)+'/d':'—'}</td><td style="text-align:right">${r.dlTot>0?(DAILY.vi?.[r.p]??0)+'/d':'—'}</td><td style="text-align:right">${r.nd||'—'}</td><td style="text-align:right;font-weight:600;${r.tb?'color:var(--blue)':''}">${r.tb?'+'+fm(r.tb):'✓'}</td><td style="text-align:right">${r.tb?'$'+fm(r.cg):'—'}</td></tr>`).join('')}</tbody></table></div>`;
+
+  // Use ALL tracked products (core + gifts)
+  const allRows=ALL_TRACK.map(p=>{
+    const dlUS=DAILY.tw?.[p]??0,dlAU=DAILY.vi?.[p]??0,dlTot=dlUS+dlAU;
+    const avgP=AVG_PRICE[p]??PRICES[p]??0; // real avg selling price from orders
+    const costP=COGS[p]??0; // real COGS from Shopify
+    const crUS=STOCK.tw?.[p]??0,crAU=STOCK.vi?.[p]??0,crTot=crUS+crAU;
+    // Units needed = target revenue share * days / avg price
+    const revShare=avgP>0?dlTot*avgP:0;
+    const nd=avgP>0?Math.ceil(dlTot*tDays):0;
+    const tb=Math.max(0,nd-crTot);
+    const cg=tb*costP; // real COGS per unit
+    const gift=GIFT_P.includes(p);
+    return{p,dlUS,dlAU,dlTot,avgP,costP,nd,crTot,crUS,crAU,tb,cg,gift,revShare}
+  });
+
+  // Total daily revenue = sum of (velocity * avg price) across all products
+  const totalDailyRev=allRows.reduce((s,r)=>s+r.revShare,0);
+  const totalCogs=allRows.reduce((s,r)=>s+r.cg,0);
+  const hasAvgPrices=Object.keys(AVG_PRICE).length>0;
+  const hasCogs=Object.keys(COGS).length>0;
+
+  el.innerHTML=`
+    ${!hasAvgPrices?'<div style="background:var(--warnbg);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--warn)">⚠ Connect Shopify to load real avg selling prices and COGS.</div>':''}
+    <div class="g4" style="margin-bottom:14px">
+      <div class="mc"><div class="ml">Current daily revenue</div><div class="mv">$${fm(totalDailyRev)}</div><div class="ms">Based on real avg prices</div></div>
+      <div class="mc"><div class="ml">Target over ${tDays}d</div><div class="mv">$${fm(tRev)}</div></div>
+      <div class="mc"><div class="ml">Total daily units</div><div class="mv">${allRows.reduce((s,r)=>s+r.dlTot,0).toFixed(0)}</div></div>
+      <div class="mc"><div class="ml">Est. COGS to order</div><div class="mv">$${fm(totalCogs)}</div><div class="ms">${hasCogs?'From Shopify cost fields':'No cost data yet'}</div></div>
+    </div>
+    <div class="card">
+      <div class="ct">Units needed to hit $${fm(tRev)} over ${tDays} days</div>
+      <table class="sf-t"><thead><tr>
+        <th>Product</th><th>Type</th>
+        <th style="text-align:right">US stock</th><th style="text-align:right">AU stock</th>
+        <th style="text-align:right">US daily</th><th style="text-align:right">AU daily</th>
+        <th style="text-align:right">Avg price</th><th style="text-align:right">Unit cost</th>
+        <th style="text-align:right">Needed (${tDays}d)</th>
+        <th style="text-align:right">To buy</th><th style="text-align:right">Est. COGS</th>
+      </tr></thead><tbody>
+      ${allRows.map(r=>`<tr>
+        <td style="font-weight:600">${r.p}</td>
+        <td><span class="bdg ${r.gift?'bin':'bmu'}">${r.gift?'gift':'core'}</span></td>
+        <td style="text-align:right">${fm(r.crUS)}</td>
+        <td style="text-align:right">${fm(r.crAU)}</td>
+        <td style="text-align:right">${r.dlUS?r.dlUS+'/d':'—'}</td>
+        <td style="text-align:right">${r.dlAU?r.dlAU+'/d':'—'}</td>
+        <td style="text-align:right">${r.avgP?'$'+r.avgP.toFixed(2):'—'}</td>
+        <td style="text-align:right">${r.costP?'$'+r.costP.toFixed(2):'—'}</td>
+        <td style="text-align:right">${r.nd||'—'}</td>
+        <td style="text-align:right;font-weight:600;${r.tb?'color:var(--blue)':''}">${r.tb?'+'+fm(r.tb):'✓'}</td>
+        <td style="text-align:right">${r.tb&&r.costP?'$'+fm(r.cg):'—'}</td>
+      </tr>`).join('')}
+      </tbody></table>
+    </div>`;
 }
+
 function rReorder(){document.getElementById('tab-reorder').innerHTML=`<div class="card" style="margin-bottom:14px"><div class="ct">Revenue target</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:20px"><div><div style="font-size:13px;color:var(--text2);margin-bottom:6px">Target revenue ($)</div><input class="ri" type="number" id="trv" value="${tRev}" min="1000" step="1000"></div><div><div style="font-size:13px;color:var(--text2);margin-bottom:6px">Over how many days</div><input class="ri" type="number" id="tdy" value="${tDays}" min="7" step="7"></div></div></div><div id="rr"></div>`;uReorder();document.getElementById('trv').addEventListener('input',e=>{tRev=parseInt(e.target.value)||50000;uReorder()});document.getElementById('tdy').addEventListener('input',e=>{tDays=parseInt(e.target.value)||60;uReorder()})}
 function rPO(){
   const prods=[...new Set(POS.flatMap(p=>p.lines.map(l=>l.p)))].sort();
