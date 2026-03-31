@@ -704,51 +704,38 @@ async function loadPackagingOrders(){
 function pkgRevenueCalc(){
   const rev=pkgTargetRev||0;
   if(!rev||pkgOrders.length===0)return'';
-
-  // Use DAILY_REV from Shopify (already normalised per-day, independent of period)
   const dailyRev=DAILY_REV>0?DAILY_REV:0;
-  if(dailyRev===0)return'<div style="color:var(--warn);font-size:13px;padding:10px 0">⚠ Connect Shopify to get revenue data for this calculator.</div>';
-
+  if(dailyRev===0)return'<div style="color:var(--warn);font-size:13px;padding:10px 0">⚠ Connect Shopify to get revenue data.</div>';
   const daysNeeded=rev/dailyRev;
-
-  // Per-order averages from the loaded sample
   const n=pkgOrders.length;
   const avgHalf=pkgOrders.reduce((s,o)=>s+(o.halfMailers||0),0)/n;
   const avgNormal=pkgOrders.reduce((s,o)=>s+(o.normalMailers||0),0)/n;
   const avgC4=pkgOrders.reduce((s,o)=>s+(o.carton4||0),0)/n;
   const avgC2=pkgOrders.reduce((s,o)=>s+(o.carton2||0),0)/n;
-
-  // Use DAILY_ORDERS from Shopify 30d sync (consistent, not affected by pkg period)
-  // This ensures avg order value = dailyRev / dailyOrders is always 30d-normalised
   const dailyOrders=DAILY_ORDERS>0?DAILY_ORDERS:(n/pkgPeriod);
   const avgOrderValue=dailyOrders>0?dailyRev/dailyOrders:0;
   const ordersNeeded=avgOrderValue>0?Math.round(rev/avgOrderValue):0;
-
   const projHalf=Math.round(avgHalf*ordersNeeded);
   const projNormal=Math.round(avgNormal*ordersNeeded);
   const projC4=Math.round(avgC4*ordersNeeded);
   const projC2=Math.round(avgC2*ordersNeeded);
-
-  return`<div class="card" style="margin-bottom:16px">
-    <div class="ct">Revenue packaging calculator</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px">
-      <div>
-        <div style="font-size:13px;color:var(--text2);margin-bottom:6px">Target revenue ($)</div>
-        <input class="ri" id="pkg-rev-input" type="number" value="${pkgTargetRev}" min="0" step="10000" style="width:100%">
-      </div>
-      <div style="display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:6px">
-        <div style="font-size:12px;color:var(--text2)">$${fm(Math.round(dailyRev))}/day · ~${Math.round(daysNeeded)} days · ~${fm(Math.round(ordersNeeded))} orders</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">Based on ${pkgPeriod}-day avg · ${n} orders sampled</div>
-      </div>
-    </div>
-    <div class="g4">
-      <div class="mc"><div class="ml">Half Mailer Boxes</div><div class="mv">${fm(projHalf)}</div><div class="ms">${(projHalf/daysNeeded).toFixed(1)}/d</div></div>
-      <div class="mc"><div class="ml">Standard Mailers</div><div class="mv">${fm(projNormal)}</div><div class="ms">${(projNormal/daysNeeded).toFixed(1)}/d</div></div>
-      <div class="mc"><div class="ml">Double Cartons (2×)</div><div class="mv">${fm(projC2)}</div><div class="ms">${(projC2/daysNeeded).toFixed(1)}/d</div></div>
-      <div class="mc"><div class="ml">Quad Cartons (4×)</div><div class="mv">${fm(projC4)}</div><div class="ms">${(projC4/daysNeeded).toFixed(1)}/d</div></div>
-    </div>
+  return`<div style="font-size:12px;color:var(--text2);margin-bottom:12px">
+    $${fm(Math.round(dailyRev))}/day · ~${Math.round(daysNeeded)} days · ~${fm(ordersNeeded)} orders
+    <span style="margin-left:8px;color:var(--text3)">Based on ${pkgPeriod}-day avg · ${n} orders sampled</span>
+  </div>
+  <div class="g4">
+    <div class="mc"><div class="ml">Half Mailer Boxes</div><div class="mv">${fm(projHalf)}</div><div class="ms">${daysNeeded>0?(projHalf/daysNeeded).toFixed(1)+'/d':''}</div></div>
+    <div class="mc"><div class="ml">Standard Mailers</div><div class="mv">${fm(projNormal)}</div><div class="ms">${daysNeeded>0?(projNormal/daysNeeded).toFixed(1)+'/d':''}</div></div>
+    <div class="mc"><div class="ml">Double Cartons (2×)</div><div class="mv">${fm(projC2)}</div><div class="ms">${daysNeeded>0?(projC2/daysNeeded).toFixed(1)+'/d':''}</div></div>
+    <div class="mc"><div class="ml">Quad Cartons (4×)</div><div class="mv">${fm(projC4)}</div><div class="ms">${daysNeeded>0?(projC4/daysNeeded).toFixed(1)+'/d':''}</div></div>
   </div>`;
 }
+
+function updatePkgRevCalc(){
+  const el=document.getElementById('pkg-rev-results');
+  if(el)el.innerHTML=pkgRevenueCalc();
+}
+
 
 function pkgOrderSizeBreakdown(){
   const dist={};
@@ -822,7 +809,16 @@ function rPackaging(){
         ${pkgOrderSizeBreakdown()}
       </div>
     </div>
-    ${pkgRevenueCalc()}
+    <div class="card" style="margin-bottom:16px">
+      <div class="ct">Revenue packaging calculator</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px">
+        <div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:6px">Target revenue ($)</div>
+          <input class="ri" id="pkg-rev-input" type="number" value="${pkgTargetRev}" min="0" step="10000" style="width:100%">
+        </div>
+      </div>
+      <div id="pkg-rev-results">${pkgRevenueCalc()}</div>
+    </div>
     <div class="card">
       <div class="ct">Order-level detail <span class="bdg bmu">Last ${pkgPeriod}d · ${pkgOrders.length} orders</span></div>
       <table class="sf-t"><thead><tr><th>Order</th><th>Items</th><th style="text-align:right">½ mailer</th><th style="text-align:right">Std mailers</th><th style="text-align:right">2× carton</th><th style="text-align:right">4× carton</th></tr></thead>
@@ -840,7 +836,14 @@ function rPackaging(){
   const psel=document.getElementById('pkg-period');
   if(psel)psel.addEventListener('change',e=>{pkgPeriod=parseInt(e.target.value);loadPackagingOrders()});
   const rvi=document.getElementById('pkg-rev-input');
-  if(rvi)rvi.addEventListener('input',e=>{pkgTargetRev=parseInt(e.target.value)||0;rPackaging();});
+  if(rvi)rvi.addEventListener('input',e=>{
+    pkgTargetRev=parseInt(e.target.value)||0;
+    const card=document.getElementById('pkg-rev-card');
+    if(card){card.outerHTML=pkgRevenueCalc();
+      const rvi2=document.getElementById('pkg-rev-input');
+      if(rvi2){rvi2.focus();const v=rvi2.value;rvi2.value='';rvi2.value=v;}
+    }
+  });
 }
 
 const TABS=['overview','inventory','bundles','forecast','reorder','po','suppliers','payments','packaging'];
