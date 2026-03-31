@@ -106,7 +106,14 @@ var UNITS_SOLD_DATA={};
 const FCS=[{id:'tw',name:'Tidal Wave',flag:'🇺🇸',loc:'United States'},{id:'vi',name:'Internal WH',flag:'🇦🇺',loc:'Victoria, AU'}];
 const TODAY=new Date().toISOString().split('T')[0];
 const SC={'Draft':{bg:'#e2e0d9',tc:'#4f4e4a',pr:0},'Submitted':{bg:'#d8e9f7',tc:'#185fa5',pr:12},'Confirmed':{bg:'#e3e0fc',tc:'#4540a8',pr:25},'In Production':{bg:'#f4dbe8',tc:'#882a4e',pr:38},'Shipped':{bg:'#caeedd',tc:'#0c6849',pr:55},'In Transit':{bg:'#9ddfc6',tc:'#064d3a',pr:68},'Customs':{bg:'#fae0a8',tc:'#7a4808',pr:72},'At FC':{bg:'#f7be58',tc:'#5a3300',pr:85},'Received':{bg:'#d1ecb8',tc:'#2f5e0e',pr:100}};
-const SHOPIFY_PRODUCTS={'Core products':[{t:'Body Wash',sku:'BWc&c-MANLY',p:33.83},{t:'Deodorant',sku:'Dc&c-MANLY',p:31.43},{t:'Shampoo',sku:'SHAc&c-MANLY',p:33.83},{t:'Conditioner',sku:'CONc&c-MANLY',p:33.83},{t:'Ball Deodorant',sku:'SSC&C',p:31.67}],'Free gifts & add-ons':[{t:'Body Buffer',sku:'BB-MANLY',p:20.00},{t:'Scalp Scrubber',sku:'SCALP-MANLY',p:20.00},{t:'Cooling Wipes',sku:'CW-MANLY',p:25.00}],'Accessories':[{t:'Face Towel',sku:null,p:30.00},{t:'Dopp Kit',sku:null,p:30.00}],'Bundles & kits':[{t:'Body Care Kit',sku:'BCKc&c',p:90.26},{t:'Shower Essentials',sku:'SEC&C',p:132.92},{t:'Hair Care Kit',sku:'HCKc&c',p:67.66},{t:'Shower Trio Kit',sku:'STKc&c',p:86.77},{t:'Ball Package',sku:'BPc&c',p:65.50}],'Single products':[{t:'Restore & Hydrate',sku:'RESTOREHYDRATE',p:42.47},{t:'Essentials Package',sku:'OLDSE',p:153.16}]};
+const SHOPIFY_PRODUCTS={'Core products':[{t:'Body Wash',sku:'BWc&c-MANLY',p:33.83},{t:'Deodorant',sku:'Dc&c-MANLY',p:31.43},{t:'Shampoo',sku:'SHAc&c-MANLY',p:33.83},{t:'Conditioner',sku:'CONc&c-MANLY',p:33.83},{t:'Ball Deodorant',sku:'SSC&C',p:31.67}],'Free gifts & add-ons':[{t:'Body Buffer',sku:'BB-MANLY',p:20.00},{t:'Scalp Scrubber',sku:'SCALP-MANLY',p:20.00},{t:'Cooling Wipes',sku:'CW-MANLY',p:25.00}],'Accessories':[{t:'Face Towel',sku:null,p:30.00},{t:'Dopp Kit',sku:null,p:30.00}],'Bundles & kits':[{t:'Body Care Kit',sku:'BCKc&c',p:90.26},{t:'Shower Essentials',sku:'SEC&C',p:132.92},{t:'Hair Care Kit',sku:'HCKc&c',p:67.66},{t:'Shower Trio Kit',sku:'STKc&c',p:86.77},{t:'Ball Package',sku:'BPc&c',p:65.50}],'Single products':[{t:'Restore & Hydrate',sku:'RESTOREHYDRATE',p:42.47},{t:'Essentials Package',sku:'OLDSE',p:153.16}],
+'Mailer boxes & packaging':[
+  {t:'Half Mailer Box (2 items)',sku:'MB-HALF',p:0},
+  {t:'Standard Mailer Box (4 bottles + 3 gifts)',sku:'MB-STD',p:0},
+  {t:'Double Mailer Box (2x Standard)',sku:'MB-DBL',p:0},
+  {t:'Quad Mailer Box (4x Standard)',sku:'MB-QUAD',p:0},
+  {t:'Packing Peanuts',sku:'PKG-PEANUTS',p:0},
+]};
 const ALL_PRODS=Object.values(SHOPIFY_PRODUCTS).flat();
 const CORE_P=['Body Wash','Deodorant','Shampoo','Conditioner','Ball Deodorant'];
 const GIFT_P=['Body Buffer','Scalp Scrubber','Cooling Wipes'];
