@@ -115,7 +115,7 @@ let nSup=3;
 const INV_FILES={};
 let POS=[];
 let nPO=1,lineCtx=200,pof={sup:'',fc:'',st:'',df:'',dt:'',prods:[]},aFC='tw',gMode='30',csFrom='',csTo='',tRev=50000,tDays=60,activeTab='po',modalPayments=[],lineIds=[];
-const STOCK={tw:{},vi:{}};const AVG_PRICE={};const COGS={};const UNITS_SOLD={};let DAILY_REV=0;let VELOCITY_PERIOD=30;
+const STOCK={tw:{},vi:{}};const AVG_PRICE={};const COGS={};
 const DAILY={tw:{},vi:{}};
 let shConnected=false,skConnected=false;
 const sup=id=>SUPPLIERS.find(s=>s.id===id)||{name:'Unknown',email:'',addr:'',terms:{deposit:30,port:0,receipt:70},currency:'AUD',payTerms:'',bankName:'',bankAcct:''};
@@ -165,9 +165,6 @@ async function syncShopify(btn){
     if(d.velocity_au){if(!DAILY.vi)DAILY.vi={};for(const[product,vel]of Object.entries(d.velocity_au)){DAILY.vi[product]=vel}}
     if(d.avg_price){for(const[product,price]of Object.entries(d.avg_price)){AVG_PRICE[product]=price}}
     if(d.cogs){for(const[product,cost]of Object.entries(d.cogs)){COGS[product]=cost}}
-    if(d.units_sold){for(const[product,qty]of Object.entries(d.units_sold)){UNITS_SOLD[product]=qty}}
-    if(d.daily_revenue)DAILY_REV=d.daily_revenue;
-    if(d.period_days)VELOCITY_PERIOD=d.period_days;
     skConnected=true;
     btn.textContent='● Shopify';btn.style.color='var(--green)';btn.disabled=false;
     rActive();
@@ -374,24 +371,16 @@ function uReorder(){
   const el=document.getElementById('rr');if(!el)return;
   const hasData=Object.keys(AVG_PRICE).length>0;
   const hasCogs=Object.keys(COGS).length>0;
-
-  // Current revenue over the selected period
-  const periodRev=DAILY_REV*VELOCITY_PERIOD;
-  const dailyRev=DAILY_REV;
-
-  // Revenue multiplier: how much to scale up/down to hit target over tDays
-  // Target daily revenue = tRev / tDays
-  // Current daily revenue = DAILY_REV
+  const dailyRev=DAILY_REV||0;
+  const periodRev=dailyRev*VELOCITY_PERIOD;
   const targetDailyRev=tRev/tDays;
   const multiplier=dailyRev>0?targetDailyRev/dailyRev:1;
-
   const allRows=ALL_TRACK.map(p=>{
-    const dlUS=DAILY.tw?.[p]??0, dlAU=DAILY.vi?.[p]??0, dlTot=dlUS+dlAU;
+    const dlUS=DAILY.tw?.[p]??0,dlAU=DAILY.vi?.[p]??0,dlTot=dlUS+dlAU;
     const avgP=AVG_PRICE[p]>0?AVG_PRICE[p]:(PRICES[p]??0);
     const costP=COGS[p]??0;
-    const crUS=STOCK.tw?.[p]??0, crAU=STOCK.vi?.[p]??0, crTot=crUS+crAU;
+    const crUS=STOCK.tw?.[p]??0,crAU=STOCK.vi?.[p]??0,crTot=crUS+crAU;
     const unitsSold=UNITS_SOLD[p]??0;
-    // Units needed = (units sold in period × multiplier) scaled to tDays window
     const nd=Math.ceil(dlTot*multiplier*tDays);
     const tb=Math.max(0,nd-crTot);
     const cg=tb*costP;
@@ -399,45 +388,25 @@ function uReorder(){
     const dailyRevShare=dlTot*avgP;
     return{p,dlUS,dlAU,dlTot,avgP,costP,nd,crTot,crUS,crAU,tb,cg,gift,dailyRevShare,unitsSold}
   });
-
   const totalCogs=allRows.reduce((s,r)=>s+r.cg,0);
   const projectedRev=dailyRev*tDays;
-  const multLabel=multiplier>=1?`${multiplier.toFixed(1)}× scale-up`:`${multiplier.toFixed(1)}× scale-down`;
-
+  const multPct=((multiplier-1)*100).toFixed(0);
+  const multLabel=multiplier>1?`+${multPct}% scale-up needed`:multiplier<0.99?`${multPct}% scale-down`:'On track';
   el.innerHTML=`
     ${!hasData?'<div style="background:var(--warnbg);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--warn)">⚠ Connect Shopify to load real data.</div>':''}
     <div class="g4" style="margin-bottom:14px">
-      <div class="mc">
-        <div class="ml">Actual daily revenue <span class="bdg bmu">${VELOCITY_PERIOD}d avg</span></div>
-        <div class="mv">$${fm(dailyRev)}</div>
-        <div class="ms">$${fm(periodRev)} over ${VELOCITY_PERIOD} days</div>
-      </div>
-      <div class="mc">
-        <div class="ml">Projected over ${tDays}d</div>
-        <div class="mv">$${fm(projectedRev)}</div>
-        <div class="ms">At current velocity</div>
-      </div>
-      <div class="mc">
-        <div class="ml">Revenue target</div>
-        <div class="mv">$${fm(tRev)}</div>
-        <div class="ms" style="${multiplier>1?'color:var(--warn)':'color:var(--green)'">${multLabel}</div>
-      </div>
-      <div class="mc">
-        <div class="ml">Est. COGS to order</div>
-        <div class="mv">$${fm(totalCogs)}</div>
-        <div class="ms">${hasCogs?'From Shopify cost fields':'Add costs in Shopify'}</div>
-      </div>
+      <div class="mc"><div class="ml">Actual daily revenue <span class="bdg bmu">${VELOCITY_PERIOD}d avg</span></div><div class="mv">$${fm(dailyRev)}</div><div class="ms">$${fm(periodRev)} over ${VELOCITY_PERIOD} days</div></div>
+      <div class="mc"><div class="ml">Projected over ${tDays}d</div><div class="mv">$${fm(projectedRev)}</div><div class="ms">At current velocity</div></div>
+      <div class="mc"><div class="ml">Revenue target</div><div class="mv">$${fm(tRev)}</div><div class="ms" style="${multiplier>1?'color:var(--warn)':'color:var(--green)'}">${multLabel}</div></div>
+      <div class="mc"><div class="ml">Est. COGS to order</div><div class="mv">$${fm(totalCogs)}</div><div class="ms">${hasCogs?'From Shopify cost fields':'Add costs in Shopify'}</div></div>
     </div>
     <div class="card">
-      <div class="ct">
-        Units needed to hit $${fm(tRev)} over ${tDays} days
-        <span class="bdg ${multiplier>1.1?'bwn':multiplier<0.9?'bin':'bok'}">${multLabel}</span>
-      </div>
+      <div class="ct">Units needed to hit $${fm(tRev)} over ${tDays} days <span class="bdg ${multiplier>1.05?'bwn':multiplier<0.95?'bin':'bok'}">${multLabel}</span></div>
       <table class="sf-t"><thead><tr>
         <th>Product</th><th>Type</th>
         <th style="text-align:right">US stock</th><th style="text-align:right">AU stock</th>
         <th style="text-align:right">US /d</th><th style="text-align:right">AU /d</th>
-        <th style="text-align:right">Units sold (${VELOCITY_PERIOD}d)</th>
+        <th style="text-align:right">Sold (${VELOCITY_PERIOD}d)</th>
         <th style="text-align:right">Avg price</th><th style="text-align:right">Unit cost</th>
         <th style="text-align:right">Daily rev</th>
         <th style="text-align:right">Need (${tDays}d)</th>
@@ -461,29 +430,15 @@ function uReorder(){
       </tbody></table>
     </div>`;
 }
-style="text-align:right;font-weight:600">${fm(r.nd)||'—'}</td>
-        <td style="text-align:right;font-weight:600;${r.tb?'color:var(--blue)':''}">${r.tb?'+'+fm(r.tb):'✓'}</td>
-        <td style="text-align:right">${r.tb&&r.costP?'$'+fm(r.cg):'—'}</td>
-      </tr>`).join('')}
-      </tbody></table>
-    </div>`;
-}
 function rReorder(){
   document.getElementById('tab-reorder').innerHTML=`
     <div class="card" style="margin-bottom:14px">
       <div class="ct">Revenue target</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;align-items:end">
-        <div>
-          <div style="font-size:13px;color:var(--text2);margin-bottom:6px">Target revenue ($)</div>
-          <input class="ri" type="number" id="trv" value="${tRev}" min="1000" step="1000">
-        </div>
-        <div>
-          <div style="font-size:13px;color:var(--text2);margin-bottom:6px">Over how many days</div>
-          <input class="ri" type="number" id="tdy" value="${tDays}" min="7" step="7">
-        </div>
-        <div>
-          <div style="font-size:13px;color:var(--text2);margin-bottom:6px">Velocity period</div>
-          <select class="sf-sel" id="vel-period" style="width:100%;font-size:16px;padding:6px 0;border:none;border-bottom:1px solid var(--border2)">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px">
+        <div><div style="font-size:13px;color:var(--text2);margin-bottom:6px">Target revenue ($)</div><input class="ri" type="number" id="trv" value="${tRev}" min="1000" step="1000"></div>
+        <div><div style="font-size:13px;color:var(--text2);margin-bottom:6px">Over how many days</div><input class="ri" type="number" id="tdy" value="${tDays}" min="7" step="7"></div>
+        <div><div style="font-size:13px;color:var(--text2);margin-bottom:6px">Velocity period</div>
+          <select class="sf-sel" id="vel-period" style="width:100%;font-size:16px;padding:6px 0;border:none;border-bottom:1px solid var(--border2);background:none">
             <option value="7" ${VELOCITY_PERIOD===7?'selected':''}>Last 7 days</option>
             <option value="14" ${VELOCITY_PERIOD===14?'selected':''}>Last 14 days</option>
             <option value="30" ${VELOCITY_PERIOD===30?'selected':''}>Last 30 days</option>
@@ -500,4 +455,60 @@ function rReorder(){
     const btn=document.getElementById('sk-btn');
     await syncShopify(btn);
   });
-}}
+}
+function rPO(){
+  const prods=[...new Set(POS.flatMap(p=>p.lines.map(l=>l.p)))].sort();
+  let filt=POS.filter(po=>{if(pof.sup&&po.supId!==pof.sup)return false;if(pof.fc&&po.fc!==pof.fc)return false;if(pof.st&&po.status!==pof.st)return false;if(pof.df&&po.exp&&po.exp<pof.df)return false;if(pof.dt&&po.exp&&po.exp>pof.dt)return false;if(pof.prods.length&&!pof.prods.some(fp=>po.lines.some(l=>l.p===fp)))return false;return true});
+  const act=filt.filter(p=>p.status!=='Received'),rec=filt.filter(p=>p.status==='Received');
+  const anyF=pof.sup||pof.fc||pof.st||pof.df||pof.dt||pof.prods.length;
+  document.getElementById('tab-po').innerHTML=`
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <div class="g4" style="margin:0;flex:1"><div class="mc"><div class="ml">Open POs</div><div class="mv">${POS.filter(p=>p.status!=='Received').length}</div></div><div class="mc"><div class="ml">Overdue POs</div><div class="mv" style="${POS.filter(p=>od(p)).length?'color:var(--red)':''}">${POS.filter(p=>od(p)).length}</div></div><div class="mc"><div class="ml">Overdue payments</div><div class="mv" style="${overdueP().length?'color:var(--red)':''}">${overdueP().length}</div></div><div class="mc"><div class="ml">Total owed</div><div class="mv" style="${POS.reduce((s,po)=>s+payOwed(po),0)?'color:var(--warn)':''}">$${fm(POS.reduce((s,po)=>s+payOwed(po),0))}</div></div></div>
+      <button class="btn btp" onclick="openPO(null)" style="white-space:nowrap;margin-top:4px">+ New PO</button>
+    </div>
+    <div class="fbar">
+      <div class="fg"><div class="fl">Supplier</div><select class="fi" onchange="pof.sup=this.value;rPO()"><option value="">All</option>${SUPPLIERS.map(s=>`<option value="${s.id}" ${pof.sup===s.id?'selected':''}>${s.name}</option>`).join('')}</select></div>
+      <div class="fg"><div class="fl">FC</div><select class="fi" onchange="pof.fc=this.value;rPO()"><option value="">All</option>${FCS.map(f=>`<option value="${f.id}" ${pof.fc===f.id?'selected':''}>${f.flag} ${f.name}</option>`).join('')}</select></div>
+      <div class="fg"><div class="fl">Status</div><select class="fi" onchange="pof.st=this.value;rPO()"><option value="">All</option>${Object.keys(SC).map(s=>`<option ${pof.st===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="fg"><div class="fl">Exp. from</div><input type="date" class="fi" value="${pof.df}" onchange="pof.df=this.value;rPO()"></div>
+      <div class="fg"><div class="fl">Exp. to</div><input type="date" class="fi" value="${pof.dt}" onchange="pof.dt=this.value;rPO()"></div>
+      ${anyF?`<button class="btn bts" onclick="pof={sup:'',fc:'',st:'',df:'',dt:'',prods:[]};rPO()">✕ Clear</button>`:''}
+    </div>
+    <div class="card">
+      <div class="ct">Active POs ${anyF?`<span class="bdg bin">${act.length} shown</span>`:''}</div>
+      <table class="sf-t"><thead><tr><th>PO</th><th>Supplier</th><th>FC</th><th>Status</th><th>Expected</th><th>Products</th><th>Payments</th><th></th></tr></thead><tbody>
+      ${act.length?act.map(po=>{const s=sup(po.supId);const paidC=po.payments.filter(p=>p.status==='Paid').length;const ovdC=po.payments.filter(p=>p.status==='Overdue').length;return`<tr><td style="font-weight:600">${po.id}</td><td><div style="font-weight:600">${s.name}</div><div style="font-size:11px;color:var(--text2)">${s.currency}</div></td><td>${fcn(po.fc).flag} ${fcn(po.fc).name}</td><td><div style="position:relative;display:inline-block">${sPill(po)}</div><div class="prog-w"><div class="prog-b" style="width:${SC[po.status]?.pr??0}%"></div></div></td><td>${od(po)?`<span class="ov">⚠ Overdue<br></span>`:''}<span style="font-size:12px">${po.exp||'—'}</span></td><td style="font-size:12px">${po.lines.slice(0,2).map(l=>`<div>${l.o}× ${l.p}</div>`).join('')}${po.lines.length>2?`<div style="color:var(--text2)">+${po.lines.length-2} more</div>`:''}</td><td><div style="font-size:12px">${paidC}/${po.payments.length} paid</div>${ovdC?`<span class="bdg bdn" style="margin-top:3px">${ovdC} overdue</span>`:''}<div style="font-size:11px;color:var(--text2)">$${fm(payOwed(po))} owed</div></td><td><div style="display:flex;gap:4px;flex-wrap:wrap"><button class="btn bts" onclick="openPO('${po.id}')">Edit</button><button class="btn bts" onclick="openPayDetail('${po.id}')">Payments</button><button class="btd" onclick="confirmDeletePO('${po.id}')">Delete</button></div></td></tr>`}).join(''):`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text2)">No active POs${anyF?' match filters':''}. <button class="btn bts" onclick="openPO(null)">Create one</button></td></tr>`}
+      </tbody></table>
+    </div>
+    <div class="card">
+      <div class="ct">Completed POs</div>
+      <table class="sf-t"><thead><tr><th>PO</th><th>Supplier</th><th>FC</th><th>Status</th><th>Delivered</th><th>Value</th><th>Payment</th><th></th></tr></thead><tbody>
+      ${rec.length?rec.map(po=>`<tr><td style="font-weight:600">${po.id}</td><td>${sup(po.supId).name}</td><td>${fcn(po.fc).flag} ${fcn(po.fc).name}</td><td><div style="position:relative;display:inline-block">${sPill(po)}</div></td><td style="font-size:12px">${po.exp}</td><td style="font-size:12px;font-weight:600">$${fm(poTotal(po))}</td><td><span class="bdg ${po.payments.every(p=>p.status==='Paid')?'bok':'bwn'}">${po.payments.filter(p=>p.status==='Paid').length}/${po.payments.length} paid</span></td><td><div style="display:flex;gap:4px"><button class="btn bts" onclick="openPO('${po.id}')">Edit</button><button class="btn bts" onclick="openPayDetail('${po.id}')">Payments</button><button class="btd" onclick="confirmDeletePO('${po.id}')">Delete</button></div></td></tr>`).join(''):`<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--text2)">No completed POs</td></tr>`}
+      </tbody></table>
+    </div>`;
+}
+function rSuppliers(){
+  const poCount=id=>POS.filter(p=>p.supId===id).length;
+  document.getElementById('tab-suppliers').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div><div style="font-size:14px;font-weight:600">Saved suppliers</div></div><button class="btn btp" onclick="openSupplier(null)">+ Add supplier</button></div>
+    ${SUPPLIERS.map(s=>`<div class="sup-card"><div class="sup-av">${s.name.slice(0,2).toUpperCase()}</div><div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px"><span style="font-size:14px;font-weight:600">${s.name}</span><span class="bdg bmu">${s.currency}</span><span class="bdg bmu">${poCount(s.id)} PO${poCount(s.id)!==1?'s':''}</span></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px 16px;font-size:12px;color:var(--text2)">${s.contact?`<div>👤 ${s.contact}</div>`:''} ${s.email?`<div>✉ ${s.email}</div>`:''} ${s.phone?`<div>📞 ${s.phone}</div>`:''} ${s.addr?`<div>📍 ${s.addr}</div>`:''}<div>💳 ${s.payTerms}</div>${s.bankName?`<div>🏦 ${s.bankName} ${s.bankAcct}</div>`:''}</div>${s.notes?`<div style="font-size:12px;color:var(--text2);margin-top:6px;padding:6px 10px;background:var(--bg2);border-radius:6px">${s.notes}</div>`:''}</div><div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end"><button class="btn bts" onclick="openSupplier('${s.id}')">Edit</button><button class="btn bts" onclick="openPO(null)">New PO</button></div></div>`).join('')}`;
+}
+function rPayments(){
+  const all=POS.flatMap(po=>po.payments.map(p=>({...p,po})));const overdue=all.filter(p=>p.status==='Overdue');const upcoming=all.filter(p=>p.status==='Unpaid'&&p.dueDate&&p.dueDate>TODAY).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));const paid=all.filter(p=>p.status==='Paid');
+  document.getElementById('tab-payments').innerHTML=`
+    <div class="g4"><div class="mc"><div class="ml">Total paid</div><div class="mv" style="color:var(--green)">$${fm(paid.reduce((s,p)=>s+p.amount,0))}</div></div><div class="mc"><div class="ml">Outstanding</div><div class="mv" style="color:var(--warn)">$${fm(all.filter(p=>p.status!=='Paid').reduce((s,p)=>s+p.amount,0))}</div></div><div class="mc"><div class="ml">Overdue</div><div class="mv" style="${overdue.length?'color:var(--red)':''}">$${fm(overdue.reduce((s,p)=>s+p.amount,0))}</div></div><div class="mc"><div class="ml">No POs yet</div><div class="mv" style="color:var(--text3)">—</div></div></div>
+    ${overdue.length?`<div class="card" style="border-color:var(--red)"><div class="ct">Overdue <span class="bdg bdn">${overdue.length}</span></div><table class="sf-t"><thead><tr><th>PO</th><th>Type</th><th>Supplier</th><th>Due</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>${overdue.map(p=>`<tr><td style="font-weight:600">${p.po.id}</td><td>${p.type}</td><td>${sup(p.po.supId).name}</td><td><span class="ov">${fmtD(p.dueDate)}</span></td><td style="text-align:right;font-weight:600">$${fm(p.amount)}</td><td><button class="btn bts" style="color:var(--green);border-color:var(--green)" onclick="markPaid('${p.po.id}','${p.id}');rPayments()">Mark paid</button></td></tr>`).join('')}</tbody></table></div>`:''}
+    <div class="card"><div class="ct">Upcoming payments</div>${upcoming.length?`<table class="sf-t"><thead><tr><th>PO</th><th>Type</th><th>Supplier</th><th>Due</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>${upcoming.map(p=>`<tr><td style="font-weight:600">${p.po.id}</td><td>${p.type}</td><td>${sup(p.po.supId).name}</td><td style="font-size:12px">${fmtD(p.dueDate)}</td><td style="text-align:right;font-weight:600">$${fm(p.amount)}</td><td><button class="btn bts" onclick="openPayDetail('${p.po.id}')">View PO</button></td></tr>`).join('')}</tbody></table>`:'<div class="sn">No upcoming payments.</div>'}</div>
+    <div class="card"><div class="ct">Payment history</div><table class="sf-t"><thead><tr><th>PO</th><th>Type</th><th>Supplier</th><th>Paid on</th><th style="text-align:right">Amount</th></tr></thead><tbody>${paid.length?paid.sort((a,b)=>(b.paidDate||'').localeCompare(a.paidDate||'')).map(p=>`<tr><td style="font-weight:600">${p.po.id}</td><td>${p.type}</td><td>${sup(p.po.supId).name}</td><td style="font-size:12px">${fmtD(p.paidDate)}</td><td style="text-align:right;font-weight:600">$${fm(p.amount)}</td></tr>`).join(''):'<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--text2)">No payments recorded</td></tr>'}</tbody></table></div>`;
+}
+const TABS=['overview','inventory','bundles','forecast','reorder','po','suppliers','payments'];
+const TLBLS={overview:'Overview',inventory:'Inventory',bundles:'Bundles',forecast:'Forecast',reorder:'Reorder',po:'Purchase Orders',suppliers:'Suppliers',payments:'Payments'};
+const RFNS={overview:rOverview,inventory:rInventory,bundles:rBundles,forecast:rForecast,reorder:rReorder,po:rPO,suppliers:rSuppliers,payments:rPayments};
+function switchTab(t){activeTab=t;TABS.forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('active',x===t)});document.querySelectorAll('.tb').forEach(b=>b.classList.toggle('active',b.dataset.t===t));RFNS[t]?.()}
+function rActive(){RFNS[activeTab]?.()}
+document.getElementById('tnav').innerHTML=TABS.map(t=>`<button class="tb${t==='po'?' active':''}" data-t="${t}">${TLBLS[t]}</button>`).join('');
+document.querySelectorAll('.tb').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.t)));
+switchTab('po');
+</script>
+</body>
+</html>
