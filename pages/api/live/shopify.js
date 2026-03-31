@@ -29,7 +29,7 @@ export default async function handler(req, res) {
     const since30 = new Date()
     since30.setDate(since30.getDate() - 30)
 
-    // Fetch products (all statuses), locations, first orders page in parallel
+    // Step 1: Fetch products p1, locations, first orders page — all parallel
     const [prodRes, locRes, firstOrdersRes] = await Promise.all([
       fetch(`${BASE}/products.json?limit=250`, { headers: HEADERS }),
       fetch(`${BASE}/locations.json`, { headers: HEADERS }),
@@ -41,57 +41,84 @@ export default async function handler(req, res) {
 
     const [prodData, locData] = await Promise.all([prodRes.json(), locRes.json()])
 
-    // Build inventory_item_id -> SKU map from page 1
+    // Build SKU map from page 1
     const itemToSku = {}
+    const skuToItemId = {}
     for (const product of prodData.products) {
       for (const variant of product.variants) {
         if (variant.sku && variant.inventory_item_id) {
           itemToSku[variant.inventory_item_id] = variant.sku
-        }
-      }
-    }
-
-    // Fetch page 2 of products if needed (for missing SKUs)
-    const foundSKUs = new Set(Object.values(itemToSku))
-    const missingCount = Object.keys(SKU_MAP).filter(s => !foundSKUs.has(s)).length
-    if (missingCount > 0 && prodData.products.length === 250) {
-      const lastId = prodData.products[prodData.products.length - 1].id
-      const prod2Res = await fetch(`${BASE}/products.json?limit=250&since_id=${lastId}`, { headers: HEADERS })
-      if (prod2Res.ok) {
-        const prod2Data = await prod2Res.json()
-        for (const product of prod2Data.products) {
-          for (const variant of product.variants) {
-            if (variant.sku && variant.inventory_item_id) {
-              itemToSku[variant.inventory_item_id] = variant.sku
-            }
-          }
+          skuToItemId[variant.sku] = variant.inventory_item_id
         }
       }
     }
 
     const locations = locData.locations.filter(l => l.active)
     const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
+    const lastProductId = prodData.products[prodData.products.length - 1]?.id
 
-    // Get ALL inventory levels for AU location (no item ID filter) then match by SKU
-    const auStockBySku = {}
-    if (auLocation) {
-      let invUrl = `${BASE}/inventory_levels.json?location_id=${auLocation.id}&limit=250`
-      while (invUrl) {
-        const invRes = await fetch(invUrl, { headers: HEADERS })
-        if (!invRes.ok) break
-        const invData = await invRes.json()
-        for (const level of invData.inventory_levels) {
-          const sku = itemToSku[level.inventory_item_id]
-          if (!sku || !TRACKED_SKUS.has(sku)) continue
-          auStockBySku[sku] = Math.max(0, level.available || 0)
+    // Step 2: Fetch products page 2 AND inventory levels for page-1 SKUs — parallel
+    const page1ItemIds = Object.keys(SKU_MAP).map(s => skuToItemId[s]).filter(Boolean)
+
+    const parallelFetches = []
+    if (prodData.products.length === 250 && lastProductId) {
+      parallelFetches.push(fetch(`${BASE}/products.json?limit=250&since_id=${lastProductId}`, { headers: HEADERS }))
+    } else {
+      parallelFetches.push(Promise.resolve(null))
+    }
+    if (auLocation && page1ItemIds.length > 0) {
+      parallelFetches.push(fetch(`${BASE}/inventory_levels.json?location_id=${auLocation.id}&inventory_item_ids=${page1ItemIds.join(',')}&limit=250`, { headers: HEADERS }))
+    } else {
+      parallelFetches.push(Promise.resolve(null))
+    }
+
+    const [prod2Res, invRes] = await Promise.all(parallelFetches)
+
+    // Process page 2 products
+    if (prod2Res?.ok) {
+      const prod2Data = await prod2Res.json()
+      for (const product of prod2Data.products) {
+        for (const variant of product.variants) {
+          if (variant.sku && variant.inventory_item_id) {
+            itemToSku[variant.inventory_item_id] = variant.sku
+            skuToItemId[variant.sku] = variant.inventory_item_id
+          }
         }
-        const linkHeader = invRes.headers.get('Link') || ''
-        const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
-        invUrl = nextMatch ? nextMatch[1] : null
       }
     }
 
-    // Process orders with pagination
+    // Process inventory levels from page 1 SKUs
+    const auStockBySku = {}
+    if (invRes?.ok) {
+      const invData = await invRes.json()
+      for (const level of invData.inventory_levels) {
+        const sku = itemToSku[level.inventory_item_id]
+        if (!sku) continue
+        auStockBySku[sku] = Math.max(0, level.available || 0)
+      }
+    }
+
+    // Step 3: Fetch inventory for any SKUs found only on page 2
+    const missingInvSKUs = Object.keys(SKU_MAP).filter(s => skuToItemId[s] && !auStockBySku[s])
+    if (missingInvSKUs.length > 0 && auLocation) {
+      const missingItemIds = missingInvSKUs.map(s => skuToItemId[s]).filter(Boolean)
+      if (missingItemIds.length > 0) {
+        const inv2Res = await fetch(
+          `${BASE}/inventory_levels.json?location_id=${auLocation.id}&inventory_item_ids=${missingItemIds.join(',')}&limit=250`,
+          { headers: HEADERS }
+        )
+        if (inv2Res.ok) {
+          const inv2Data = await inv2Res.json()
+          for (const level of inv2Data.inventory_levels) {
+            const sku = itemToSku[level.inventory_item_id]
+            if (!sku) continue
+            auStockBySku[sku] = Math.max(0, level.available || 0)
+          }
+        }
+      }
+    }
+
+    // Step 4: Process orders with pagination
     const soldBySkuUS = {}
     const soldBySkuAU = {}
     let totalOrders = 0
@@ -143,7 +170,7 @@ export default async function handler(req, res) {
       au_location: auLocation?.name || 'not found',
       orders_analysed: totalOrders,
       period_days: 30,
-      item_ids_mapped: Object.keys(itemToSku).length,
+      skus_mapped: Object.keys(skuToItemId).length,
     })
 
   } catch (err) {
