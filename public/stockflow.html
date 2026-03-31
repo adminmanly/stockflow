@@ -157,7 +157,7 @@ async function syncShipHero(btn){
 async function syncShopify(btn){
   btn.textContent='⟳ Shopify…';btn.disabled=true;
   try{
-    const r=await fetch('/api/live/shopify?days='+VELOCITY_PERIOD);
+const r=await fetch('/api/live/shopify?days='+(typeof VELOCITY_PERIOD!=='undefined'?VELOCITY_PERIOD:30));
     const d=await r.json();
     if(!r.ok||d.error)throw new Error(d.error||'Shopify error');
     if(d.au_stock){for(const[product,qty]of Object.entries(d.au_stock)){STOCK.vi[product]=qty}}
