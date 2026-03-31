@@ -103,6 +103,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <script>
 var VELOCITY_PERIOD=30;
 var DAILY_REV=0;
+var DAILY_ORDERS=0;
 var UNITS_SOLD_DATA={};
 const FCS=[{id:'tw',name:'Tidal Wave',flag:'🇺🇸',loc:'United States'},{id:'vi',name:'Internal WH',flag:'🇦🇺',loc:'Victoria, AU'}];
 const TODAY=new Date().toISOString().split('T')[0];
@@ -180,6 +181,7 @@ async function syncShopify(btn){
     if(d.cogs){for(const[product,cost]of Object.entries(d.cogs)){COGS[product]=cost}}
     if(d.units_sold){for(const[product,qty]of Object.entries(d.units_sold)){UNITS_SOLD_DATA[product]=qty}}
     if(d.daily_revenue)DAILY_REV=d.daily_revenue;
+    if(d.orders_analysed&&d.period_days)DAILY_ORDERS=d.orders_analysed/d.period_days;
     if(d.period_days)VELOCITY_PERIOD=d.period_days;
     skConnected=true;
     btn.textContent='● Shopify';btn.style.color='var(--green)';btn.disabled=false;
@@ -709,18 +711,18 @@ function pkgRevenueCalc(){
 
   const daysNeeded=rev/dailyRev;
 
-  // Normalise to per-order averages from the loaded sample (period-independent)
+  // Per-order averages from the loaded sample
   const n=pkgOrders.length;
   const avgHalf=pkgOrders.reduce((s,o)=>s+(o.halfMailers||0),0)/n;
   const avgNormal=pkgOrders.reduce((s,o)=>s+(o.normalMailers||0),0)/n;
   const avgC4=pkgOrders.reduce((s,o)=>s+(o.carton4||0),0)/n;
   const avgC2=pkgOrders.reduce((s,o)=>s+(o.carton2||0),0)/n;
 
-  // Estimated orders needed = target revenue / avg order value
-  // avg order value = (daily rev * period) / orders in sample
-  const periodRev=dailyRev*pkgPeriod;
-  const avgOrderValue=n>0?periodRev/n:0;
-  const ordersNeeded=avgOrderValue>0?rev/avgOrderValue:0;
+  // Use DAILY_ORDERS from Shopify 30d sync (consistent, not affected by pkg period)
+  // This ensures avg order value = dailyRev / dailyOrders is always 30d-normalised
+  const dailyOrders=DAILY_ORDERS>0?DAILY_ORDERS:(n/pkgPeriod);
+  const avgOrderValue=dailyOrders>0?dailyRev/dailyOrders:0;
+  const ordersNeeded=avgOrderValue>0?Math.round(rev/avgOrderValue):0;
 
   const projHalf=Math.round(avgHalf*ordersNeeded);
   const projNormal=Math.round(avgNormal*ordersNeeded);
