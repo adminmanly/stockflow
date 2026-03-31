@@ -29,62 +29,41 @@ export default async function handler(req, res) {
     const since30 = new Date()
     since30.setDate(since30.getDate() - 30)
 
-    // Step 1: Fetch products, locations, and first orders page all in parallel
-    const [prodRes, locRes, firstOrdersRes] = await Promise.all([
-      fetch(`${BASE}/products.json?limit=250&status=active`, { headers: HEADERS }),
+    // Step 1: Look up all 8 SKUs via variants API + get locations + start orders — all in parallel
+    const skuLookups = Object.keys(SKU_MAP).map(sku =>
+      fetch(`${BASE}/variants.json?sku=${encodeURIComponent(sku)}&limit=5`, { headers: HEADERS })
+    )
+
+    const [locRes, firstOrdersRes, ...variantResponses] = await Promise.all([
       fetch(`${BASE}/locations.json`, { headers: HEADERS }),
-      fetch(`${BASE}/orders.json?status=any&financial_status=paid&created_at_min=${since30.toISOString()}&limit=250&fields=id,line_items,shipping_address`, { headers: HEADERS })
+      fetch(`${BASE}/orders.json?status=any&financial_status=paid&created_at_min=${since30.toISOString()}&limit=250&fields=id,line_items,shipping_address`, { headers: HEADERS }),
+      ...skuLookups
     ])
 
-    if (!prodRes.ok) throw new Error(`Shopify products error: ${prodRes.status}`)
     if (!locRes.ok) throw new Error(`Shopify locations error: ${locRes.status}`)
 
-    const [prodData, locData] = await Promise.all([prodRes.json(), locRes.json()])
+    const locData = await locRes.json()
+    const locations = locData.locations.filter(l => l.active)
+    const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
 
-    // Build inventory_item_id -> SKU map
+    // Build SKU -> inventory_item_id map from variant lookups
     const itemToSku = {}
     const skuToItemId = {}
 
-    const processProducts = (products) => {
-      for (const product of products) {
-        for (const variant of product.variants) {
-          if (variant.sku && variant.inventory_item_id) {
-            itemToSku[variant.inventory_item_id] = variant.sku
-            skuToItemId[variant.sku] = variant.inventory_item_id
-          }
+    const variantData = await Promise.all(variantResponses.map(r => r.ok ? r.json() : { variants: [] }))
+    for (const data of variantData) {
+      for (const v of data.variants || []) {
+        if (v.sku && v.inventory_item_id) {
+          itemToSku[v.inventory_item_id] = v.sku
+          skuToItemId[v.sku] = v.inventory_item_id
         }
       }
     }
 
-    processProducts(prodData.products)
-
-    // Look up any missing SKUs directly via variants API
-    const missingSKUs = Object.keys(SKU_MAP).filter(sku => !skuToItemId[sku])
-    if (missingSKUs.length > 0) {
-      await Promise.all(missingSKUs.map(async (sku) => {
-        const vRes = await fetch(`${BASE}/variants.json?sku=${encodeURIComponent(sku)}&limit=10`, { headers: HEADERS })
-        if (vRes.ok) {
-          const vData = await vRes.json()
-          for (const v of vData.variants || []) {
-            if (v.sku && v.inventory_item_id) {
-              itemToSku[v.inventory_item_id] = v.sku
-              skuToItemId[v.sku] = v.inventory_item_id
-            }
-          }
-        }
-      }))
-    }
-
-    const locations = locData.locations.filter(l => l.active)
-    const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
-
-    // Step 2: Get AU stock using specific inventory item IDs
+    // Step 2: Get AU warehouse stock using exact inventory item IDs
     const auStockBySku = {}
     if (auLocation) {
-      const trackedItemIds = Object.keys(SKU_MAP)
-        .map(sku => skuToItemId[sku])
-        .filter(Boolean)
-
+      const trackedItemIds = Object.keys(SKU_MAP).map(sku => skuToItemId[sku]).filter(Boolean)
       if (trackedItemIds.length > 0) {
         const invRes = await fetch(
           `${BASE}/inventory_levels.json?location_id=${auLocation.id}&inventory_item_ids=${trackedItemIds.join(',')}&limit=250`,
@@ -117,7 +96,6 @@ export default async function handler(req, res) {
       for (const order of ordersData.orders || []) {
         const country = order.shipping_address?.country_code || 'US'
         const isAU = country === 'AU'
-
         for (const item of order.line_items) {
           if (!item.sku || !TRACKED_SKUS.has(item.sku)) continue
           if (!parseFloat(item.price)) continue
@@ -154,6 +132,7 @@ export default async function handler(req, res) {
       au_location: auLocation?.name || 'not found',
       orders_analysed: totalOrders,
       period_days: 30,
+      skus_found: Object.keys(skuToItemId).length,
     })
 
   } catch (err) {
