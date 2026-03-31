@@ -98,6 +98,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div id="tab-po" class="tab-content"></div>
 <div id="tab-suppliers" class="tab-content"></div>
 <div id="tab-payments" class="tab-content"></div>
+<div id="tab-packaging" class="tab-content"></div>
 </div>
 <script>
 var VELOCITY_PERIOD=30;
@@ -120,8 +121,10 @@ const GIFT_P=['Body Buffer','Scalp Scrubber','Cooling Wipes'];
 const ALL_TRACK=[...CORE_P,...GIFT_P];
 const PRICES=Object.fromEntries(ALL_PRODS.filter(p=>ALL_TRACK.includes(p.t)).map(p=>[p.t,p.p]));
 const BUNDLES=[{n:'Body Care Kit',sku:'BCKc&c',c:{'Body Wash':1,'Deodorant':1},p:90.26},{n:'Shower Essentials',sku:'SEC&C',c:{'Body Wash':1,'Deodorant':1,'Shampoo':1,'Conditioner':1},p:132.92},{n:'Hair Care Kit',sku:'HCKc&c',c:{'Shampoo':1,'Conditioner':1},p:67.66},{n:'Shower Trio Kit',sku:'STKc&c',c:{'Body Wash':1,'Shampoo':1,'Conditioner':1},p:86.77},{n:'Ball Package',sku:'BPc&c',c:{'Ball Deodorant':1,'Body Buffer':1},p:65.50}];
-let SUPPLIERS=[{id:'s1',name:'Clean Co AU',contact:'James Wilson',email:'orders@cleanceau.com',phone:'+61 3 9000 1234',addr:'12 Supply St, Melbourne VIC 3000',country:'Australia',currency:'AUD',payTerms:'30% deposit, 70% on receipt',bankName:'ANZ Bank',bankAcct:'••••4521',notes:'Primary AU supplier.',terms:{deposit:30,port:0,receipt:70}},{id:'s2',name:'Fresh Supply US',contact:'Sarah Chen',email:'po@freshsupply.com',phone:'+1 310 555 0199',addr:'900 Warehouse Blvd, Los Angeles CA 90001',country:'USA',currency:'USD',payTerms:'30% deposit, 40% at port, 30% on receipt',bankName:'Chase Bank',bankAcct:'••••8832',notes:'Ships direct to Tidal Wave.',terms:{deposit:30,port:40,receipt:30}}];
-let nSup=3;
+const DEFAULT_SUPPLIERS=[{id:'s1',name:'Clean Co AU',contact:'James Wilson',email:'orders@cleanceau.com',phone:'+61 3 9000 1234',addr:'12 Supply St, Melbourne VIC 3000',country:'Australia',currency:'AUD',payTerms:'30% deposit, 70% on receipt',bankName:'ANZ Bank',bankAcct:'••••4521',notes:'Primary AU supplier.',terms:{deposit:30,port:0,receipt:70}},{id:'s2',name:'Fresh Supply US',contact:'Sarah Chen',email:'po@freshsupply.com',phone:'+1 310 555 0199',addr:'900 Warehouse Blvd, Los Angeles CA 90001',country:'USA',currency:'USD',payTerms:'30% deposit, 40% at port, 30% on receipt',bankName:'Chase Bank',bankAcct:'••••8832',notes:'Ships direct to Tidal Wave.',terms:{deposit:30,port:40,receipt:30}}];
+let SUPPLIERS=JSON.parse(localStorage.getItem('sf_suppliers')||'null')||DEFAULT_SUPPLIERS;
+let nSup=Math.max(3,SUPPLIERS.reduce((m,s)=>Math.max(m,parseInt(s.id.replace('s',''))||0),0)+1);
+function saveSuppliersLocal(){try{localStorage.setItem('sf_suppliers',JSON.stringify(SUPPLIERS))}catch(e){}}
 const INV_FILES={};
 let POS=[];
 let nPO=1,lineCtx=200,pof={sup:'',fc:'',st:'',df:'',dt:'',prods:[]},aFC='tw',gMode='30',csFrom='',csTo='',tRev=50000,tDays=60,activeTab='po',modalPayments=[],lineIds=[];
@@ -331,10 +334,10 @@ function deleteSup(sid){
   const s=SUPPLIERS.find(x=>x.id===sid);if(!s)return;
   const hasPOs=POS.some(p=>p.supId===sid);
   if(hasPOs&&!confirm(s.name+' has existing POs. Delete anyway?'))return;
-  SUPPLIERS=SUPPLIERS.filter(x=>x.id!==sid);
+  SUPPLIERS=SUPPLIERS.filter(x=>x.id!==sid);saveSuppliersLocal();
   closeM();rSuppliers();
 }
-function saveSup(sid){const acct=document.getElementById('sb-a').value;const masked=acct.length>4?'••••'+acct.slice(-4):acct||'';const data={name:document.getElementById('sn').value,contact:document.getElementById('sc').value,email:document.getElementById('se').value,phone:document.getElementById('sp').value,addr:document.getElementById('sa').value,country:document.getElementById('sco').value,currency:document.getElementById('scu').value,payTerms:document.getElementById('st-desc').value,bankName:document.getElementById('sb-b').value,bankAcct:masked,notes:document.getElementById('sno').value,terms:{deposit:+document.getElementById('st-d').value||0,port:+document.getElementById('st-p').value||0,receipt:+document.getElementById('st-r').value||0}};if(sid){const idx=SUPPLIERS.findIndex(s=>s.id===sid);SUPPLIERS[idx]={...SUPPLIERS[idx],...data}}else{SUPPLIERS.push({id:'s'+nSup,...data});nSup++}closeM();rSuppliers()}
+function saveSup(sid){const acct=document.getElementById('sb-a').value;const masked=acct.length>4?'••••'+acct.slice(-4):acct||'';const data={name:document.getElementById('sn').value,contact:document.getElementById('sc').value,email:document.getElementById('se').value,phone:document.getElementById('sp').value,addr:document.getElementById('sa').value,country:document.getElementById('sco').value,currency:document.getElementById('scu').value,payTerms:document.getElementById('st-desc').value,bankName:document.getElementById('sb-b').value,bankAcct:masked,notes:document.getElementById('sno').value,terms:{deposit:+document.getElementById('st-d').value||0,port:+document.getElementById('st-p').value||0,receipt:+document.getElementById('st-r').value||0}};if(sid){const idx=SUPPLIERS.findIndex(s=>s.id===sid);SUPPLIERS[idx]={...SUPPLIERS[idx],...data};saveSuppliersLocal()}else{SUPPLIERS.push({id:'s'+nSup,...data});nSup++}saveSuppliersLocal();closeM();rSuppliers()}
 function rOverview(){
   const ib=inbound();const tot=ALL_TRACK.reduce((s,p)=>s+FCS.reduce((a,f)=>a+(STOCK[f.id]?.[p]??0),0),0);const val=ALL_TRACK.reduce((s,p)=>s+FCS.reduce((a,f)=>a+(STOCK[f.id]?.[p]??0),0)*(PRICES[p]??0),0);const allD=FCS.flatMap(f=>ALL_TRACK.map(p=>dv(f.id,p))).filter(d=>d!==null);const avgD=allD.length?Math.round(allD.reduce((a,b)=>a+b,0)/allD.length):0;const totalOwed=POS.reduce((s,po)=>s+payOwed(po),0);const ovdP=overdueP();const vel=ALL_TRACK.map(p=>({p,dUS:DAILY.tw?.[p]??0,dAU:DAILY.vi?.[p]??0})).sort((a,b)=>(b.dUS+b.dAU)-(a.dUS+a.dAU));const alerts=FCS.flatMap(f=>ALL_TRACK.map(p=>({f,p,d:dv(f.id,p)}))).filter(a=>a.d!==null&&a.d<=30).sort((a,b)=>a.d-b.d);
   document.getElementById('tab-overview').innerHTML=`
@@ -521,13 +524,233 @@ function rPayments(){
     <div class="card"><div class="ct">Upcoming payments</div>${upcoming.length?`<table class="sf-t"><thead><tr><th>PO</th><th>Type</th><th>Supplier</th><th>Due</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>${upcoming.map(p=>`<tr><td style="font-weight:600">${p.po.id}</td><td>${p.type}</td><td>${sup(p.po.supId).name}</td><td style="font-size:12px">${fmtD(p.dueDate)}</td><td style="text-align:right;font-weight:600">$${fm(p.amount)}</td><td><button class="btn bts" onclick="openPayDetail('${p.po.id}')">View PO</button></td></tr>`).join('')}</tbody></table>`:'<div class="sn">No upcoming payments.</div>'}</div>
     <div class="card"><div class="ct">Payment history</div><table class="sf-t"><thead><tr><th>PO</th><th>Type</th><th>Supplier</th><th>Paid on</th><th style="text-align:right">Amount</th></tr></thead><tbody>${paid.length?paid.sort((a,b)=>(b.paidDate||'').localeCompare(a.paidDate||'')).map(p=>`<tr><td style="font-weight:600">${p.po.id}</td><td>${p.type}</td><td>${sup(p.po.supId).name}</td><td style="font-size:12px">${fmtD(p.paidDate)}</td><td style="text-align:right;font-weight:600">$${fm(p.amount)}</td></tr>`).join(''):'<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--text2)">No payments recorded</td></tr>'}</tbody></table></div>`;
 }
-const TABS=['overview','inventory','bundles','forecast','reorder','po','suppliers','payments'];
-const TLBLS={overview:'Overview',inventory:'Inventory',bundles:'Bundles',forecast:'Forecast',reorder:'Reorder',po:'Purchase Orders',suppliers:'Suppliers',payments:'Payments'};
-const RFNS={overview:rOverview,inventory:rInventory,bundles:rBundles,forecast:rForecast,reorder:rReorder,po:rPO,suppliers:rSuppliers,payments:rPayments};
+const TABS=['overview','inventory','bundles','forecast','reorder','po','suppliers','payments','packaging'];
+const TLBLS={overview:'Overview',inventory:'Inventory',bundles:'Bundles',forecast:'Forecast',reorder:'Reorder',po:'Purchase Orders',suppliers:'Suppliers',payments:'Payments',packaging:'📦 Packaging'};
+const RFNS={overview:rOverview,inventory:rInventory,bundles:rBundles,forecast:rForecast,reorder:rReorder,po:rPO,suppliers:rSuppliers,payments:rPayments,packaging:rPackaging};
 function switchTab(t){activeTab=t;TABS.forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('active',x===t)});document.querySelectorAll('.tb').forEach(b=>b.classList.toggle('active',b.dataset.t===t));RFNS[t]?.()}
 function rActive(){RFNS[activeTab]?.()}
 document.getElementById('tnav').innerHTML=TABS.map(t=>`<button class="tb${t==='po'?' active':''}" data-t="${t}">${TLBLS[t]}</button>`).join('');
 document.querySelectorAll('.tb').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.t)));
+
+// ─── PACKAGING PROJECTION ────────────────────────────────────────────────────
+
+const PKG_CAPACITY={deodorant:6,bottle:2,scalp_scrubber:3,body_buffer:6,cooling_wipes:3};
+
+const SKU_TO_CATEGORY={
+  'Dc&c-MANLY':'deodorant',
+  'SSC&C':'deodorant',
+  'BWc&c-MANLY':'bottle',
+  'SHAc&c-MANLY':'bottle',
+  'CONc&c-MANLY':'bottle',
+  'SCALP-MANLY':'scalp_scrubber',
+  'BB-MANLY':'body_buffer',
+  'CW-MANLY':'cooling_wipes',
+};
+
+const BUNDLE_EXPAND={
+  'BCKc&c': {'BWc&c-MANLY':1,'Dc&c-MANLY':1},
+  'SEC&C':  {'BWc&c-MANLY':1,'Dc&c-MANLY':1,'SHAc&c-MANLY':1,'CONc&c-MANLY':1},
+  'HCKc&c': {'SHAc&c-MANLY':1,'CONc&c-MANLY':1},
+  'STKc&c': {'BWc&c-MANLY':1,'SHAc&c-MANLY':1,'CONc&c-MANLY':1},
+  'BPc&c':  {'SSC&C':1,'BB-MANLY':1},
+  'V2FREEGIFTS': {'BB-MANLY':1,'SCALP-MANLY':1,'CW-MANLY':1},
+  'SE':     {'BWc&c-MANLY':1,'Dc&c-MANLY':1,'SHAc&c-MANLY':1,'CONc&c-MANLY':1},
+  'SE2':    {'BWc&c-MANLY':1,'Dc&c-MANLY':1,'SHAc&c-MANLY':1,'CONc&c-MANLY':1},
+  'REPAIR': {'SHAc&c-MANLY':1,'CONc&c-MANLY':1},
+};
+
+function calcPackaging(lineItems){
+  // Step 1: expand bundles + map to categories
+  const cats={deodorant:0,bottle:0,scalp_scrubber:0,body_buffer:0,cooling_wipes:0};
+  const skuQtys={};
+
+  for(const item of lineItems){
+    const sku=item.sku; const qty=item.quantity||1;
+    if(!sku||!qty) continue;
+    // Expand bundles
+    if(BUNDLE_EXPAND[sku]){
+      for(const[compSku,compQty]of Object.entries(BUNDLE_EXPAND[sku])){
+        skuQtys[compSku]=(skuQtys[compSku]||0)+compQty*qty;
+      }
+    } else {
+      skuQtys[sku]=(skuQtys[sku]||0)+qty;
+    }
+  }
+
+  // Map SKUs to categories
+  for(const[sku,qty]of Object.entries(skuQtys)){
+    const cat=SKU_TO_CATEGORY[sku];
+    if(cat)cats[cat]+=qty;
+  }
+
+  // Step 2: half boxes per category
+  const halfByType={};
+  let totalHalf=0;
+  for(const[cat,qty]of Object.entries(cats)){
+    if(!qty)continue;
+    const cap=PKG_CAPACITY[cat]||1;
+    const h=Math.ceil(qty/cap);
+    halfByType[cat]=h;
+    totalHalf+=h;
+  }
+
+  // Step 3: convert to mailers
+  const normalMailers=Math.floor(totalHalf/2);
+  const halfMailers=totalHalf%2;
+
+  // Step 4: group normal mailers into cartons
+  const carton4=Math.floor(normalMailers/4);
+  const rem4=normalMailers%4;
+  const carton2=Math.floor(rem4/2);
+  const standalone=rem4%2;
+  const insideCartons=(carton4*4)+(carton2*2);
+
+  return{
+    cats,skuQtys,halfByType,totalHalf,
+    halfMailers,normalMailers,
+    carton4,carton2,standalone,insideCartons
+  };
+}
+
+let pkgOrders=[];
+let pkgLoading=false;
+let pkgPeriod=7;
+
+async function loadPackagingOrders(){
+  pkgLoading=true;
+  rPackaging();
+  const domain=''+window.location.hostname.replace('stockflow-manly.vercel.app','');
+  try{
+    const r=await fetch('/api/live/shopify?days='+pkgPeriod);
+    const d=await r.json();
+    if(!r.ok||d.error)throw new Error(d.error);
+    // We need actual order line items — use the packaging API
+    const r2=await fetch('/api/live/packaging?days='+pkgPeriod);
+    const d2=await r2.json();
+    if(r2.ok&&d2.orders){
+      pkgOrders=d2.orders.map(o=>({...o,...calcPackaging(o.line_items)}));
+    }
+  }catch(e){
+    console.error('[Packaging]',e.message);
+  }
+  pkgLoading=false;
+  rPackaging();
+}
+
+function rPackaging(){
+  const el=document.getElementById('tab-packaging');if(!el)return;
+
+  // Aggregate totals
+  const totals={halfMailers:0,normalMailers:0,carton4:0,carton2:0,standalone:0};
+  for(const o of pkgOrders){
+    totals.halfMailers+=o.halfMailers||0;
+    totals.normalMailers+=o.normalMailers||0;
+    totals.carton4+=o.carton4||0;
+    totals.carton2+=o.carton2||0;
+    totals.standalone+=o.standalone||0;
+  }
+
+  el.innerHTML=`
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:2px">📦 Packaging Projection</div>
+        <div class="sn" style="margin:0">Based on ${pkgPeriod}-day Shopify orders. Calculated per individual order.</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select class="sf-sel" id="pkg-period">
+          <option value="7" ${pkgPeriod===7?'selected':''}>Last 7 days</option>
+          <option value="14" ${pkgPeriod===14?'selected':''}>Last 14 days</option>
+          <option value="30" ${pkgPeriod===30?'selected':''}>Last 30 days</option>
+        </select>
+        <button class="btn btp" onclick="loadPackagingOrders()" ${pkgLoading?'disabled':''}>
+          ${pkgLoading?'⟳ Loading…':'↻ Refresh'}
+        </button>
+      </div>
+    </div>
+
+    ${pkgOrders.length===0&&!pkgLoading?`
+      <div style="background:var(--bg2);border-radius:var(--radius-lg);padding:40px;text-align:center;color:var(--text2)">
+        <div style="font-size:32px;margin-bottom:12px">📦</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:6px">No data loaded</div>
+        <div style="font-size:13px;margin-bottom:16px">Click Refresh to load packaging projections from Shopify orders</div>
+        <button class="btn btp" onclick="loadPackagingOrders()">Load packaging data</button>
+      </div>
+    `:''}
+
+    ${pkgLoading?`<div style="text-align:center;padding:40px;color:var(--text2);font-size:13px">⟳ Loading orders and calculating packaging…</div>`:''}
+
+    ${pkgOrders.length>0?`
+    <div class="g4" style="margin-bottom:16px">
+      <div class="mc"><div class="ml">Orders analysed</div><div class="mv">${pkgOrders.length}</div><div class="ms">Last ${pkgPeriod} days</div></div>
+      <div class="mc"><div class="ml">Half Mailer Boxes</div><div class="mv">${fm(totals.halfMailers)}</div><div class="ms">Single item orders</div></div>
+      <div class="mc"><div class="ml">Standard Mailers</div><div class="mv">${fm(totals.normalMailers)}</div><div class="ms">Total used</div></div>
+      <div class="mc"><div class="ml">Cartons needed</div><div class="mv">${fm(totals.carton4+totals.carton2)}</div><div class="ms">${fm(totals.carton4)} quad + ${fm(totals.carton2)} double</div></div>
+    </div>
+
+    <div class="g2" style="margin-bottom:16px">
+      <div class="card" style="margin:0">
+        <div class="ct">Packaging summary — last ${pkgPeriod} days</div>
+        <table class="sf-t">
+          <thead><tr><th>Box type</th><th style="text-align:right">Qty used</th><th style="text-align:right">Daily avg</th></tr></thead>
+          <tbody>
+            <tr><td>🗃️ Half Mailer Box (2 items)</td><td style="text-align:right;font-weight:600">${fm(totals.halfMailers)}</td><td style="text-align:right">${(totals.halfMailers/pkgPeriod).toFixed(1)}/d</td></tr>
+            <tr><td>📦 Standard Mailer Box</td><td style="text-align:right;font-weight:600">${fm(totals.normalMailers)}</td><td style="text-align:right">${(totals.normalMailers/pkgPeriod).toFixed(1)}/d</td></tr>
+            <tr><td>📫 Double Carton (2× standard)</td><td style="text-align:right;font-weight:600">${fm(totals.carton2)}</td><td style="text-align:right">${(totals.carton2/pkgPeriod).toFixed(1)}/d</td></tr>
+            <tr><td>🏗️ Quad Carton (4× standard)</td><td style="text-align:right;font-weight:600">${fm(totals.carton4)}</td><td style="text-align:right">${(totals.carton4/pkgPeriod).toFixed(1)}/d</td></tr>
+            <tr><td style="color:var(--text2)">Standalone mailers (no carton)</td><td style="text-align:right">${fm(totals.standalone)}</td><td style="text-align:right">${(totals.standalone/pkgPeriod).toFixed(1)}/d</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card" style="margin:0">
+        <div class="ct">Packaging breakdown by order size</div>
+        ${(()=>{
+          const dist={};
+          for(const o of pkgOrders){
+            const k=o.normalMailers===0&&o.halfMailers===1?'Half only':
+                    o.normalMailers===1&&o.halfMailers===0?'1 standard':
+                    o.normalMailers===1&&o.halfMailers===1?'1 std + half':
+                    o.normalMailers>1?o.normalMailers+' standard'+(o.halfMailers?' + half':''):'Other';
+            dist[k]=(dist[k]||0)+1;
+          }
+          return`<table class="sf-t"><thead><tr><th>Packaging used</th><th style="text-align:right">Orders</th><th style="text-align:right">%</th></tr></thead><tbody>
+            ${Object.entries(dist).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<tr><td>${k}</td><td style="text-align:right;font-weight:600">${v}</td><td style="text-align:right">${(v/pkgOrders.length*100).toFixed(1)}%</td></tr>`).join('')}
+          </tbody></table>`;
+        })()}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ct">Order-level breakdown <span class="bdg bmu">Last ${pkgPeriod} days · ${pkgOrders.length} orders</span></div>
+      <table class="sf-t">
+        <thead><tr>
+          <th>Order</th><th>Items</th>
+          <th style="text-align:right">Half boxes</th>
+          <th style="text-align:right">½ mailer</th>
+          <th style="text-align:right">Std mailers</th>
+          <th style="text-align:right">2× carton</th>
+          <th style="text-align:right">4× carton</th>
+        </tr></thead>
+        <tbody>
+        ${pkgOrders.slice(0,100).map(o=>`<tr>
+          <td style="font-weight:600;font-size:12px">#${o.order_number||o.order_id}</td>
+          <td style="font-size:12px;color:var(--text2)">${Object.entries(o.cats||{}).filter(([,v])=>v>0).map(([k,v])=>`${v}×${k.replace('_',' ')}`).join(', ')}</td>
+          <td style="text-align:right">${o.totalHalf}</td>
+          <td style="text-align:right">${o.halfMailers||0}</td>
+          <td style="text-align:right;font-weight:600">${o.normalMailers||0}</td>
+          <td style="text-align:right">${o.carton2||0}</td>
+          <td style="text-align:right">${o.carton4||0}</td>
+        </tr>`).join('')}
+        ${pkgOrders.length>100?`<tr><td colspan="7" style="text-align:center;padding:10px;color:var(--text2);font-size:12px">Showing first 100 of ${pkgOrders.length} orders</td></tr>`:''}
+        </tbody>
+      </table>
+    </div>
+    `:''}`;
+
+  const psel=document.getElementById('pkg-period');
+  if(psel)psel.addEventListener('change',e=>{pkgPeriod=parseInt(e.target.value);loadPackagingOrders()});
+}
+
+
 switchTab('po');
 </script>
 </body>
