@@ -71,11 +71,12 @@ export default async function handler(req, res) {
       if (invRes.ok) {
         const invData = await invRes.json()
         invBody = invData.inventory_levels?.length
-        for (const level of invData.inventory_levels || []) {
-          const sku = itemToSku[String(level.inventory_item_id)]
-          if (!sku) continue
-          auStockBySku[sku] = Math.max(0, level.available || 0)
-        }
+for (const level of invData.inventory_levels || []) {
+  if (String(level.location_id) !== String(auLocation.id)) continue
+  const sku = itemToSku[String(level.inventory_item_id)]
+  if (!sku) continue
+  auStockBySku[sku] = Math.max(0, level.available || 0)
+}
       } else {
         // Try without location filter — just by item IDs
         const invRes2 = await fetch(`${BASE}/inventory_levels.json?inventory_item_ids=${allItemIds.join(',')}&limit=250`, { headers: HEADERS })
