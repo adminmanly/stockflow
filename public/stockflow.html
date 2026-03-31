@@ -101,6 +101,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 <script>
 var VELOCITY_PERIOD=30;
+var DAILY_REV=0;
+var UNITS_SOLD_DATA={};
 const FCS=[{id:'tw',name:'Tidal Wave',flag:'🇺🇸',loc:'United States'},{id:'vi',name:'Internal WH',flag:'🇦🇺',loc:'Victoria, AU'}];
 const TODAY=new Date().toISOString().split('T')[0];
 const SC={'Draft':{bg:'#e2e0d9',tc:'#4f4e4a',pr:0},'Submitted':{bg:'#d8e9f7',tc:'#185fa5',pr:12},'Confirmed':{bg:'#e3e0fc',tc:'#4540a8',pr:25},'In Production':{bg:'#f4dbe8',tc:'#882a4e',pr:38},'Shipped':{bg:'#caeedd',tc:'#0c6849',pr:55},'In Transit':{bg:'#9ddfc6',tc:'#064d3a',pr:68},'Customs':{bg:'#fae0a8',tc:'#7a4808',pr:72},'At FC':{bg:'#f7be58',tc:'#5a3300',pr:85},'Received':{bg:'#d1ecb8',tc:'#2f5e0e',pr:100}};
@@ -166,6 +168,9 @@ async function syncShopify(btn){
     if(d.velocity_au){if(!DAILY.vi)DAILY.vi={};for(const[product,vel]of Object.entries(d.velocity_au)){DAILY.vi[product]=vel}}
     if(d.avg_price){for(const[product,price]of Object.entries(d.avg_price)){AVG_PRICE[product]=price}}
     if(d.cogs){for(const[product,cost]of Object.entries(d.cogs)){COGS[product]=cost}}
+    if(d.units_sold){for(const[product,qty]of Object.entries(d.units_sold)){UNITS_SOLD_DATA[product]=qty}}
+    if(d.daily_revenue)DAILY_REV=d.daily_revenue;
+    if(d.period_days)VELOCITY_PERIOD=d.period_days;
     skConnected=true;
     btn.textContent='● Shopify';btn.style.color='var(--green)';btn.disabled=false;
     rActive();
@@ -381,7 +386,7 @@ function uReorder(){
     const avgP=AVG_PRICE[p]>0?AVG_PRICE[p]:(PRICES[p]??0);
     const costP=COGS[p]??0;
     const crUS=STOCK.tw?.[p]??0,crAU=STOCK.vi?.[p]??0,crTot=crUS+crAU;
-    const unitsSold=UNITS_SOLD[p]??0;
+    const unitsSold=UNITS_SOLD_DATA[p]??0;
     const nd=Math.ceil(dlTot*multiplier*tDays);
     const tb=Math.max(0,nd-crTot);
     const cg=tb*costP;
