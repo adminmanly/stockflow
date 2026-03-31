@@ -318,7 +318,14 @@ function openSupplier(sid){
     <div style="font-size:12px;font-weight:600;margin:12px 0 8px">Banking details</div>
     <div class="frow"><div><div class="form-lbl">Bank name</div><input class="form-in" id="sb-b" value="${s?s.bankName:''}"></div><div><div class="form-lbl">Account number</div><input class="form-in" id="sb-a" value="" placeholder="Will be masked after save"></div></div>
     <div class="frow1"><div class="form-lbl">Notes</div><input class="form-in" id="sno" value="${s?s.notes:''}"></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:12px;border-top:0.5px solid var(--border);margin-top:12px"><button class="btn" onclick="closeM()">Cancel</button><button class="btn btp" onclick="saveSup(${s?`'${s.id}'`:null})">Save supplier</button></div></div>`);
+    <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:12px;border-top:0.5px solid var(--border);margin-top:12px"><button class="btn" onclick="closeM()">Cancel</button>${s?`<button class="btd" onclick="closeM();deleteSup('${s.id}')">Delete supplier</button>`:''}<button class="btn btp" onclick="saveSup(${s?`'${s.id}'`:null})">Save supplier</button></div></div>`);
+}
+function deleteSup(sid){
+  const s=SUPPLIERS.find(x=>x.id===sid);if(!s)return;
+  const hasPOs=POS.some(p=>p.supId===sid);
+  if(hasPOs&&!confirm(s.name+' has existing POs. Delete anyway?'))return;
+  SUPPLIERS=SUPPLIERS.filter(x=>x.id!==sid);
+  closeM();rSuppliers();
 }
 function saveSup(sid){const acct=document.getElementById('sb-a').value;const masked=acct.length>4?'••••'+acct.slice(-4):acct||'';const data={name:document.getElementById('sn').value,contact:document.getElementById('sc').value,email:document.getElementById('se').value,phone:document.getElementById('sp').value,addr:document.getElementById('sa').value,country:document.getElementById('sco').value,currency:document.getElementById('scu').value,payTerms:document.getElementById('st-desc').value,bankName:document.getElementById('sb-b').value,bankAcct:masked,notes:document.getElementById('sno').value,terms:{deposit:+document.getElementById('st-d').value||0,port:+document.getElementById('st-p').value||0,receipt:+document.getElementById('st-r').value||0}};if(sid){const idx=SUPPLIERS.findIndex(s=>s.id===sid);SUPPLIERS[idx]={...SUPPLIERS[idx],...data}}else{SUPPLIERS.push({id:'s'+nSup,...data});nSup++}closeM();rSuppliers()}
 function rOverview(){
