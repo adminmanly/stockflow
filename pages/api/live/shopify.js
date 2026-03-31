@@ -29,7 +29,7 @@ export default async function handler(req, res) {
     const since30 = new Date()
     since30.setDate(since30.getDate() - 30)
 
-    // Step 1: Fetch products p1, locations, first orders page in parallel
+    // Fetch products, locations, first orders page — all in parallel
     const [prodRes, locRes, firstOrdersRes] = await Promise.all([
       fetch(`${BASE}/products.json?limit=250`, { headers: HEADERS }),
       fetch(`${BASE}/locations.json`, { headers: HEADERS }),
@@ -41,59 +41,39 @@ export default async function handler(req, res) {
 
     const [prodData, locData] = await Promise.all([prodRes.json(), locRes.json()])
 
+    // Build inventory_item_id -> SKU map
     const itemToSku = {}
-    const skuToItemId = {}
-    const processProducts = (products) => {
-      for (const p of products) {
-        for (const v of p.variants) {
-          if (v.sku && v.inventory_item_id) {
-            itemToSku[v.inventory_item_id] = v.sku
-            skuToItemId[v.sku] = v.inventory_item_id
-          }
+    for (const p of prodData.products) {
+      for (const v of p.variants) {
+        if (v.sku && v.inventory_item_id) {
+          itemToSku[v.inventory_item_id] = v.sku
         }
       }
     }
-    processProducts(prodData.products)
 
     const locations = locData.locations.filter(l => l.active)
     const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
 
-    // Step 2: For any missing SKUs, look them up directly — sequentially to avoid rate limits
-    const missingSKUs = Object.keys(SKU_MAP).filter(s => !skuToItemId[s])
-    for (const sku of missingSKUs) {
-      const vRes = await fetch(`${BASE}/variants.json?sku=${encodeURIComponent(sku)}&limit=5`, { headers: HEADERS })
-      if (vRes.ok) {
-        const vData = await vRes.json()
-        for (const v of vData.variants || []) {
-          if (v.sku && v.inventory_item_id) {
-            itemToSku[v.inventory_item_id] = v.sku
-            skuToItemId[v.sku] = v.inventory_item_id
-          }
-        }
-      }
-    }
-
-    // Step 3: Get AU warehouse stock for all 8 SKUs
+    // Fetch ALL inventory levels for AU location (no ID filter — only 48 products so small response)
     const auStockBySku = {}
     if (auLocation) {
-      const trackedItemIds = Object.keys(SKU_MAP).map(s => skuToItemId[s]).filter(Boolean)
-      if (trackedItemIds.length > 0) {
-        const invRes = await fetch(
-          `${BASE}/inventory_levels.json?location_id=${auLocation.id}&inventory_item_ids=${trackedItemIds.join(',')}&limit=250`,
-          { headers: HEADERS }
-        )
-        if (invRes.ok) {
-          const invData = await invRes.json()
-          for (const level of invData.inventory_levels) {
-            const sku = itemToSku[level.inventory_item_id]
-            if (!sku) continue
-            auStockBySku[sku] = Math.max(0, level.available || 0)
-          }
+      let invUrl = `${BASE}/inventory_levels.json?location_id=${auLocation.id}&limit=250`
+      while (invUrl) {
+        const invRes = await fetch(invUrl, { headers: HEADERS })
+        if (!invRes.ok) break
+        const invData = await invRes.json()
+        for (const level of invData.inventory_levels) {
+          const sku = itemToSku[level.inventory_item_id]
+          if (!sku || !TRACKED_SKUS.has(sku)) continue
+          auStockBySku[sku] = Math.max(0, level.available || 0)
         }
+        const linkHeader = invRes.headers.get('Link') || ''
+        const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
+        invUrl = nextMatch ? nextMatch[1] : null
       }
     }
 
-    // Step 4: Process orders with pagination
+    // Process orders with pagination
     const soldBySkuUS = {}
     const soldBySkuAU = {}
     let totalOrders = 0
@@ -145,7 +125,7 @@ export default async function handler(req, res) {
       au_location: auLocation?.name || 'not found',
       orders_analysed: totalOrders,
       period_days: 30,
-      skus_mapped: Object.keys(skuToItemId).length,
+      item_ids_mapped: Object.keys(itemToSku).length,
     })
 
   } catch (err) {
