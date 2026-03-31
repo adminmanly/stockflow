@@ -29,7 +29,6 @@ export default async function handler(req, res) {
     const since30 = new Date()
     since30.setDate(since30.getDate() - 30)
 
-    // Fetch products, locations, first orders page — all in parallel
     const [prodRes, locRes, firstOrdersRes] = await Promise.all([
       fetch(`${BASE}/products.json?limit=250`, { headers: HEADERS }),
       fetch(`${BASE}/locations.json`, { headers: HEADERS }),
@@ -41,12 +40,14 @@ export default async function handler(req, res) {
 
     const [prodData, locData] = await Promise.all([prodRes.json(), locRes.json()])
 
-    // Build inventory_item_id -> SKU map
     const itemToSku = {}
+    const skuToItemId = {}
     for (const p of prodData.products) {
       for (const v of p.variants) {
         if (v.sku && v.inventory_item_id) {
-          itemToSku[v.inventory_item_id] = v.sku
+          // Store as both string and number to handle type mismatches
+          itemToSku[String(v.inventory_item_id)] = v.sku
+          skuToItemId[v.sku] = String(v.inventory_item_id)
         }
       }
     }
@@ -54,17 +55,21 @@ export default async function handler(req, res) {
     const locations = locData.locations.filter(l => l.active)
     const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
 
-    // Fetch ALL inventory levels for AU location (no ID filter — only 48 products so small response)
+    // Get inventory levels — no ID filter, match all by SKU
     const auStockBySku = {}
+    let invLevelCount = 0
+    let matchedCount = 0
     if (auLocation) {
       let invUrl = `${BASE}/inventory_levels.json?location_id=${auLocation.id}&limit=250`
       while (invUrl) {
         const invRes = await fetch(invUrl, { headers: HEADERS })
         if (!invRes.ok) break
         const invData = await invRes.json()
-        for (const level of invData.inventory_levels) {
-          const sku = itemToSku[level.inventory_item_id]
+        invLevelCount += (invData.inventory_levels || []).length
+        for (const level of invData.inventory_levels || []) {
+          const sku = itemToSku[String(level.inventory_item_id)]
           if (!sku || !TRACKED_SKUS.has(sku)) continue
+          matchedCount++
           auStockBySku[sku] = Math.max(0, level.available || 0)
         }
         const linkHeader = invRes.headers.get('Link') || ''
@@ -105,7 +110,6 @@ export default async function handler(req, res) {
       currentRes = nextMatch ? await fetch(nextMatch[1], { headers: HEADERS }) : null
     }
 
-    // Build response
     const auStockByProduct = {}
     const velocityUSByProduct = {}
     const velocityAUByProduct = {}
@@ -116,6 +120,13 @@ export default async function handler(req, res) {
       velocityAUByProduct[productName] = +((soldBySkuAU[sku] || 0) / 30).toFixed(1)
     }
 
+    // Debug: show what we found for the missing SKUs
+    const debugMissing = ['BB-MANLY','SCALP-MANLY','CW-MANLY','SSC&C'].map(sku => ({
+      sku,
+      item_id: skuToItemId[sku] || 'NOT FOUND',
+      stock: auStockBySku[sku] ?? 'not in levels'
+    }))
+
     return res.json({
       ok: true,
       source: 'shopify',
@@ -123,9 +134,10 @@ export default async function handler(req, res) {
       velocity_us: velocityUSByProduct,
       velocity_au: velocityAUByProduct,
       au_location: auLocation?.name || 'not found',
+      au_location_id: auLocation?.id || null,
       orders_analysed: totalOrders,
       period_days: 30,
-      item_ids_mapped: Object.keys(itemToSku).length,
+      debug: { skus_mapped: Object.keys(skuToItemId).length, inv_levels_returned: invLevelCount, matched: matchedCount, missing_skus: debugMissing }
     })
 
   } catch (err) {
