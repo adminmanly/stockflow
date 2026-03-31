@@ -29,7 +29,7 @@ export default async function handler(req, res) {
     const since30 = new Date()
     since30.setDate(since30.getDate() - 30)
 
-    // Step 1: Fetch first products page, locations, first orders page in parallel
+    // Step 1: Fetch products p1, locations, first orders page in parallel
     const [prodRes, locRes, firstOrdersRes] = await Promise.all([
       fetch(`${BASE}/products.json?limit=250`, { headers: HEADERS }),
       fetch(`${BASE}/locations.json`, { headers: HEADERS }),
@@ -41,7 +41,6 @@ export default async function handler(req, res) {
 
     const [prodData, locData] = await Promise.all([prodRes.json(), locRes.json()])
 
-    // Build SKU map from page 1
     const itemToSku = {}
     const skuToItemId = {}
     const processProducts = (products) => {
@@ -59,29 +58,22 @@ export default async function handler(req, res) {
     const locations = locData.locations.filter(l => l.active)
     const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
 
-    // Step 2: Fetch products pages 2 & 3 in parallel (to find all 8 SKUs)
-    const lastId1 = prodData.products[prodData.products.length - 1]?.id
-    if (lastId1 && prodData.products.length === 250) {
-      const prod2Res = await fetch(`${BASE}/products.json?limit=250&since_id=${lastId1}`, { headers: HEADERS })
-      if (prod2Res.ok) {
-        const prod2Data = await prod2Res.json()
-        processProducts(prod2Data.products)
-
-        // Fetch page 3 if needed
-        if (prod2Data.products.length === 250) {
-          const lastId2 = prod2Data.products[prod2Data.products.length - 1]?.id
-          if (lastId2) {
-            const prod3Res = await fetch(`${BASE}/products.json?limit=250&since_id=${lastId2}`, { headers: HEADERS })
-            if (prod3Res.ok) {
-              const prod3Data = await prod3Res.json()
-              processProducts(prod3Data.products)
-            }
+    // Step 2: For any missing SKUs, look them up directly — sequentially to avoid rate limits
+    const missingSKUs = Object.keys(SKU_MAP).filter(s => !skuToItemId[s])
+    for (const sku of missingSKUs) {
+      const vRes = await fetch(`${BASE}/variants.json?sku=${encodeURIComponent(sku)}&limit=5`, { headers: HEADERS })
+      if (vRes.ok) {
+        const vData = await vRes.json()
+        for (const v of vData.variants || []) {
+          if (v.sku && v.inventory_item_id) {
+            itemToSku[v.inventory_item_id] = v.sku
+            skuToItemId[v.sku] = v.inventory_item_id
           }
         }
       }
     }
 
-    // Step 3: Get AU warehouse stock for all found SKUs
+    // Step 3: Get AU warehouse stock for all 8 SKUs
     const auStockBySku = {}
     if (auLocation) {
       const trackedItemIds = Object.keys(SKU_MAP).map(s => skuToItemId[s]).filter(Boolean)
