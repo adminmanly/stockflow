@@ -29,7 +29,7 @@ export default async function handler(req, res) {
     const since30 = new Date()
     since30.setDate(since30.getDate() - 30)
 
-    // Step 1: Fetch products p1, locations, first orders page — all parallel
+    // Step 1: Fetch first products page, locations, first orders page in parallel
     const [prodRes, locRes, firstOrdersRes] = await Promise.all([
       fetch(`${BASE}/products.json?limit=250`, { headers: HEADERS }),
       fetch(`${BASE}/locations.json`, { headers: HEADERS }),
@@ -44,72 +44,55 @@ export default async function handler(req, res) {
     // Build SKU map from page 1
     const itemToSku = {}
     const skuToItemId = {}
-    for (const product of prodData.products) {
-      for (const variant of product.variants) {
-        if (variant.sku && variant.inventory_item_id) {
-          itemToSku[variant.inventory_item_id] = variant.sku
-          skuToItemId[variant.sku] = variant.inventory_item_id
+    const processProducts = (products) => {
+      for (const p of products) {
+        for (const v of p.variants) {
+          if (v.sku && v.inventory_item_id) {
+            itemToSku[v.inventory_item_id] = v.sku
+            skuToItemId[v.sku] = v.inventory_item_id
+          }
         }
       }
     }
+    processProducts(prodData.products)
 
     const locations = locData.locations.filter(l => l.active)
     const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
-    const lastProductId = prodData.products[prodData.products.length - 1]?.id
 
-    // Step 2: Fetch products page 2 AND inventory levels for page-1 SKUs — parallel
-    const page1ItemIds = Object.keys(SKU_MAP).map(s => skuToItemId[s]).filter(Boolean)
+    // Step 2: Fetch products pages 2 & 3 in parallel (to find all 8 SKUs)
+    const lastId1 = prodData.products[prodData.products.length - 1]?.id
+    if (lastId1 && prodData.products.length === 250) {
+      const prod2Res = await fetch(`${BASE}/products.json?limit=250&since_id=${lastId1}`, { headers: HEADERS })
+      if (prod2Res.ok) {
+        const prod2Data = await prod2Res.json()
+        processProducts(prod2Data.products)
 
-    const parallelFetches = []
-    if (prodData.products.length === 250 && lastProductId) {
-      parallelFetches.push(fetch(`${BASE}/products.json?limit=250&since_id=${lastProductId}`, { headers: HEADERS }))
-    } else {
-      parallelFetches.push(Promise.resolve(null))
-    }
-    if (auLocation && page1ItemIds.length > 0) {
-      parallelFetches.push(fetch(`${BASE}/inventory_levels.json?location_id=${auLocation.id}&inventory_item_ids=${page1ItemIds.join(',')}&limit=250`, { headers: HEADERS }))
-    } else {
-      parallelFetches.push(Promise.resolve(null))
-    }
-
-    const [prod2Res, invRes] = await Promise.all(parallelFetches)
-
-    // Process page 2 products
-    if (prod2Res?.ok) {
-      const prod2Data = await prod2Res.json()
-      for (const product of prod2Data.products) {
-        for (const variant of product.variants) {
-          if (variant.sku && variant.inventory_item_id) {
-            itemToSku[variant.inventory_item_id] = variant.sku
-            skuToItemId[variant.sku] = variant.inventory_item_id
+        // Fetch page 3 if needed
+        if (prod2Data.products.length === 250) {
+          const lastId2 = prod2Data.products[prod2Data.products.length - 1]?.id
+          if (lastId2) {
+            const prod3Res = await fetch(`${BASE}/products.json?limit=250&since_id=${lastId2}`, { headers: HEADERS })
+            if (prod3Res.ok) {
+              const prod3Data = await prod3Res.json()
+              processProducts(prod3Data.products)
+            }
           }
         }
       }
     }
 
-    // Process inventory levels from page 1 SKUs
+    // Step 3: Get AU warehouse stock for all found SKUs
     const auStockBySku = {}
-    if (invRes?.ok) {
-      const invData = await invRes.json()
-      for (const level of invData.inventory_levels) {
-        const sku = itemToSku[level.inventory_item_id]
-        if (!sku) continue
-        auStockBySku[sku] = Math.max(0, level.available || 0)
-      }
-    }
-
-    // Step 3: Fetch inventory for any SKUs found only on page 2
-    const missingInvSKUs = Object.keys(SKU_MAP).filter(s => skuToItemId[s] && !auStockBySku[s])
-    if (missingInvSKUs.length > 0 && auLocation) {
-      const missingItemIds = missingInvSKUs.map(s => skuToItemId[s]).filter(Boolean)
-      if (missingItemIds.length > 0) {
-        const inv2Res = await fetch(
-          `${BASE}/inventory_levels.json?location_id=${auLocation.id}&inventory_item_ids=${missingItemIds.join(',')}&limit=250`,
+    if (auLocation) {
+      const trackedItemIds = Object.keys(SKU_MAP).map(s => skuToItemId[s]).filter(Boolean)
+      if (trackedItemIds.length > 0) {
+        const invRes = await fetch(
+          `${BASE}/inventory_levels.json?location_id=${auLocation.id}&inventory_item_ids=${trackedItemIds.join(',')}&limit=250`,
           { headers: HEADERS }
         )
-        if (inv2Res.ok) {
-          const inv2Data = await inv2Res.json()
-          for (const level of inv2Data.inventory_levels) {
+        if (invRes.ok) {
+          const invData = await invRes.json()
+          for (const level of invData.inventory_levels) {
             const sku = itemToSku[level.inventory_item_id]
             if (!sku) continue
             auStockBySku[sku] = Math.max(0, level.available || 0)
