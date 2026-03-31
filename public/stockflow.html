@@ -575,32 +575,60 @@ function calcPackaging(lineItems, halfMailerStock){
   }
 
   let halfMailers=0,normalMailers=0;
+  const isLarge=(deo>=4||bottle>=4);
 
-  if(deo>=4||bottle>=4){
-    // Large order: pack by category
-    normalMailers+=Math.floor(deo/4);
-    if(deo%4>0)halfMailers++;
-    normalMailers+=Math.floor(bottle/4);
-    if(bottle%4>0)halfMailers++;
-    if(gift>0){
-      normalMailers+=Math.floor(gift/18);
-      const gRem=gift%18;
+  if(isLarge){
+    // Bottles: floor/4 standards, remainder to half
+    const bottleStds=Math.floor(bottle/4);
+    const bottleRem=bottle%4; // remaining bottles in partial standard
+    normalMailers+=bottleStds;
+    if(bottleRem>0)halfMailers++;
+
+    // Deos stack on top of bottles — each bottle standard also holds 4 deos
+    const deoCapacity=bottleStds*4;
+    const remainingDeo=Math.max(0,deo-deoCapacity);
+    if(remainingDeo>0){
+      normalMailers+=Math.floor(remainingDeo/4);
+      if(remainingDeo%4>0)halfMailers++;
+    }
+    // Deo-only large orders
+    if(bottle===0&&deo>=4){
+      normalMailers+=Math.floor(deo/4);
+      if(deo%4>0)halfMailers++;
+    }
+
+    // Gifts: fit into the partial (half) bottle standard first if there is one
+    // If bottle standard isn't full (bottleRem>0), gifts can share that half mailer
+    // We treat the partial bottle standard as having room for gifts alongside the bottles
+    let remainingGift=gift;
+    if(bottleRem>0&&gift>0){
+      // The half-mailer has some bottles in it already — gifts can share up to 9 gifts
+      const giftCapacityInHalf=9;
+      const giftsInHalf=Math.min(remainingGift,giftCapacityInHalf);
+      remainingGift-=giftsInHalf;
+      // No extra half mailer needed for gifts that fit here — already counted above
+    }
+    // Overflow gifts that don't fit need their own mailer(s)
+    if(remainingGift>0){
+      normalMailers+=Math.floor(remainingGift/18);
+      const gRem=remainingGift%18;
       if(gRem>0){if(gRem<=3)halfMailers++;else normalMailers++;}
     }
   } else {
+    // Small order — pack everything together
     const mainItems=deo+bottle;
     if(mainItems===0){
       if(gift===0)return{deo,bottle,gift,skuQtys,halfMailers:0,normalMailers:0,carton4:0,carton2:0,standalone:0};
       if(gift<=3)halfMailers++;
       else{normalMailers+=Math.floor(gift/18);const r=gift%18;if(r>0){if(r<=3)halfMailers++;else normalMailers++;}}
-    } else if(mainItems<=2&&gift<=4){
+    } else if(mainItems<=2&&gift===0){
       halfMailers++;
     } else {
       normalMailers++;
     }
   }
 
-  // 2 half mailers = 1 standard (always upgrade pairs)
+  // 2 half mailers → upgrade to 1 standard
   normalMailers+=Math.floor(halfMailers/2);
   halfMailers=halfMailers%2;
 
@@ -610,22 +638,17 @@ function calcPackaging(lineItems, halfMailerStock){
     halfMailers=halfMailerStock;
   }
 
-  // Carton logic:
-  // Count half mailer as 1 effective slot for carton purposes
-  // 2+ halfs already upgraded above, so max 1 half here
-  // effective slots = normal mailers + (1 if half mailer exists)
+  // Carton logic: half mailer counts as 1 effective slot
   const effSlots=normalMailers+(halfMailers>0?1:0);
-
   let carton4=0,carton2=0,standalone=0;
   if(effSlots>=4){
     carton4=Math.floor(effSlots/4);
     const rem=effSlots%4;
-    // 3 leftovers need another quad (double only fits 2)
-    if(rem>=3){carton4++;}
-    else if(rem===2){carton2=1;}
-    else if(rem===1){standalone=1;}
+    if(rem>=3)carton4++;
+    else if(rem===2)carton2=1;
+    else if(rem===1)standalone=1;
   } else if(effSlots===3){
-    carton4=1; // 3 boxes only fit in quad
+    carton4=1;
   } else if(effSlots===2){
     carton2=1;
   } else if(effSlots===1){
@@ -660,6 +683,7 @@ function testPackaging(){
 }
 
 let pkgOrders=[];
+let pkgTargetRev=1000000;
 let pkgLoading=false;
 let pkgPeriod=7;
 
@@ -672,6 +696,55 @@ async function loadPackagingOrders(){
     pkgOrders=d.orders.map(o=>({...o,...calcPackaging(o.line_items)}));
   }catch(e){console.error('[Packaging]',e.message);}
   pkgLoading=false;rPackaging();
+}
+
+
+function pkgRevenueCalc(){
+  const rev=pkgTargetRev||0;
+  const period=pkgPeriod||7;
+  if(!rev||pkgOrders.length===0)return'';
+
+  // Calculate per-order averages from loaded data
+  const totals={halfMailers:0,normalMailers:0,carton4:0,carton2:0};
+  let totalRevInPeriod=0;
+  for(const o of pkgOrders){
+    totals.halfMailers+=o.halfMailers||0;
+    totals.normalMailers+=o.normalMailers||0;
+    totals.carton4+=o.carton4||0;
+    totals.carton2+=o.carton2||0;
+    totalRevInPeriod+=(o.order_revenue||0);
+  }
+
+  // Use DAILY_REV if available, else estimate from orders
+  const dailyRev=DAILY_REV>0?DAILY_REV:(totalRevInPeriod/period)||0;
+  if(dailyRev===0)return'<div style="color:var(--warn);font-size:13px">⚠ Connect Shopify to get revenue data for this calculator.</div>';
+
+  const revDays=rev/dailyRev;
+  const scale=rev/((dailyRev||1)*period);
+
+  const projHalf=Math.round(totals.halfMailers*scale);
+  const projNormal=Math.round(totals.normalMailers*scale);
+  const projC4=Math.round(totals.carton4*scale);
+  const projC2=Math.round(totals.carton2*scale);
+
+  return`<div class="card" style="margin-bottom:16px">
+    <div class="ct">Revenue packaging calculator</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px">
+      <div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:6px">Target revenue ($)</div>
+        <input class="ri" id="pkg-rev-input" type="number" value="${pkgTargetRev}" min="0" step="10000" style="width:100%">
+      </div>
+      <div style="display:flex;flex-direction:column;justify-content:flex-end">
+        <div style="font-size:12px;color:var(--text2)">Based on ${period}-day avg · $${fm(Math.round(dailyRev))}/day · ~${Math.round(revDays)} days at current velocity</div>
+      </div>
+    </div>
+    <div class="g4">
+      <div class="mc"><div class="ml">Half Mailer Boxes</div><div class="mv">${fm(projHalf)}</div><div class="ms">${dailyRev>0?(projHalf/revDays).toFixed(1)+'/d':''}</div></div>
+      <div class="mc"><div class="ml">Standard Mailers</div><div class="mv">${fm(projNormal)}</div><div class="ms">${dailyRev>0?(projNormal/revDays).toFixed(1)+'/d':''}</div></div>
+      <div class="mc"><div class="ml">Double Cartons (2×)</div><div class="mv">${fm(projC2)}</div><div class="ms">${dailyRev>0?(projC2/revDays).toFixed(1)+'/d':''}</div></div>
+      <div class="mc"><div class="ml">Quad Cartons (4×)</div><div class="mv">${fm(projC4)}</div><div class="ms">${dailyRev>0?(projC4/revDays).toFixed(1)+'/d':''}</div></div>
+    </div>
+  </div>`;
 }
 
 function pkgOrderSizeBreakdown(){
@@ -746,6 +819,7 @@ function rPackaging(){
         ${pkgOrderSizeBreakdown()}
       </div>
     </div>
+    ${pkgRevenueCalc()}
     <div class="card">
       <div class="ct">Order-level detail <span class="bdg bmu">Last ${pkgPeriod}d · ${pkgOrders.length} orders</span></div>
       <table class="sf-t"><thead><tr><th>Order</th><th>Items</th><th style="text-align:right">½ mailer</th><th style="text-align:right">Std mailers</th><th style="text-align:right">2× carton</th><th style="text-align:right">4× carton</th></tr></thead>
@@ -762,6 +836,8 @@ function rPackaging(){
     </div>`:''}`;
   const psel=document.getElementById('pkg-period');
   if(psel)psel.addEventListener('change',e=>{pkgPeriod=parseInt(e.target.value);loadPackagingOrders()});
+  const rvi=document.getElementById('pkg-rev-input');
+  if(rvi)rvi.addEventListener('input',e=>{pkgTargetRev=parseInt(e.target.value)||0;rPackaging();});
 }
 
 const TABS=['overview','inventory','bundles','forecast','reorder','po','suppliers','payments','packaging'];
