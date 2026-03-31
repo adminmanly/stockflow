@@ -577,33 +577,22 @@ function calcPackaging(lineItems, halfMailerStock){
   let halfMailers=0,normalMailers=0;
 
   if(deo>=4||bottle>=4){
-    // Large order — pack by category separately
+    // Large order: pack by category
     normalMailers+=Math.floor(deo/4);
     if(deo%4>0)halfMailers++;
-
     normalMailers+=Math.floor(bottle/4);
     if(bottle%4>0)halfMailers++;
-
     if(gift>0){
-      // gifts: <= 3 = half, 4-18 = normal mailer
       normalMailers+=Math.floor(gift/18);
       const gRem=gift%18;
-      if(gRem>0){
-        if(gRem<=3)halfMailers++;
-        else normalMailers++;
-      }
+      if(gRem>0){if(gRem<=3)halfMailers++;else normalMailers++;}
     }
   } else {
     const mainItems=deo+bottle;
     if(mainItems===0){
       if(gift===0)return{deo,bottle,gift,skuQtys,halfMailers:0,normalMailers:0,carton4:0,carton2:0,standalone:0};
-      // Gifts only: <=3 half, 4+ normal
       if(gift<=3)halfMailers++;
-      else{
-        normalMailers+=Math.floor(gift/18);
-        const r=gift%18;
-        if(r>0){if(r<=3)halfMailers++;else normalMailers++;}
-      }
+      else{normalMailers+=Math.floor(gift/18);const r=gift%18;if(r>0){if(r<=3)halfMailers++;else normalMailers++;}}
     } else if(mainItems<=2&&gift<=4){
       halfMailers++;
     } else {
@@ -611,7 +600,7 @@ function calcPackaging(lineItems, halfMailerStock){
     }
   }
 
-  // Every 2 half mailers → upgrade to 1 standard
+  // 2 half mailers = 1 standard (always upgrade pairs)
   normalMailers+=Math.floor(halfMailers/2);
   halfMailers=halfMailers%2;
 
@@ -621,20 +610,25 @@ function calcPackaging(lineItems, halfMailerStock){
     halfMailers=halfMailerStock;
   }
 
-  // Carton logic — a half mailer occupies 1 slot for carton purposes
-  const effectiveStd=normalMailers+(halfMailers>0?1:0);
+  // Carton logic:
+  // Count half mailer as 1 effective slot for carton purposes
+  // 2+ halfs already upgraded above, so max 1 half here
+  // effective slots = normal mailers + (1 if half mailer exists)
+  const effSlots=normalMailers+(halfMailers>0?1:0);
+
   let carton4=0,carton2=0,standalone=0;
-  if(effectiveStd>=4){
-    carton4=Math.floor(effectiveStd/4);
-    const rem=effectiveStd%4;
-    if(rem>=3)carton4++; // 3 leftovers need a quad not a double
-    else if(rem===2)carton2=1;
-    else if(rem===1)standalone=1;
-  } else if(effectiveStd===3){
-    carton4=1; // 3 standards need quad (double only fits 2)
-  } else if(effectiveStd===2){
+  if(effSlots>=4){
+    carton4=Math.floor(effSlots/4);
+    const rem=effSlots%4;
+    // 3 leftovers need another quad (double only fits 2)
+    if(rem>=3){carton4++;}
+    else if(rem===2){carton2=1;}
+    else if(rem===1){standalone=1;}
+  } else if(effSlots===3){
+    carton4=1; // 3 boxes only fit in quad
+  } else if(effSlots===2){
     carton2=1;
-  } else if(effectiveStd===1){
+  } else if(effSlots===1){
     standalone=1;
   }
 
@@ -757,7 +751,7 @@ function rPackaging(){
       <table class="sf-t"><thead><tr><th>Order</th><th>Items</th><th style="text-align:right">½ mailer</th><th style="text-align:right">Std mailers</th><th style="text-align:right">2× carton</th><th style="text-align:right">4× carton</th></tr></thead>
       <tbody>${pkgOrders.slice(0,100).map(o=>`<tr>
         <td style="font-weight:600;font-size:12px">#${o.order_number||o.order_id}</td>
-        <td style="font-size:11px;color:var(--text2)">${Object.entries(o.skuQtys||{}).filter(([,v])=>v>0).map(([k,v])=>v+'×'+k).join(', ')}</td>
+        <td style="font-size:11px;color:var(--text2)">${Object.entries(o.skuQtys||{}).filter(([,v])=>v>0).map(([k,v])=>{const n={'BWc&c-MANLY':'Body Wash','Dc&c-MANLY':'Deodorant','SHAc&c-MANLY':'Shampoo','CONc&c-MANLY':'Conditioner','SSC&C':'Ball Deo','BB-MANLY':'Body Buffer','SCALP-MANLY':'Scalp Scrubber','CW-MANLY':'Cooling Wipes'};return v+'× '+(n[k]||k)}).join(', ')}</td>
         <td style="text-align:right">${o.halfMailers||0}</td>
         <td style="text-align:right;font-weight:600">${o.normalMailers||0}</td>
         <td style="text-align:right">${o.carton2||0}</td>
