@@ -29,58 +29,69 @@ export default async function handler(req, res) {
     const since30 = new Date()
     since30.setDate(since30.getDate() - 30)
 
-    // Step 1: Look up all 8 SKUs via variants API + get locations + start orders — all in parallel
-    const skuLookups = Object.keys(SKU_MAP).map(sku =>
-      fetch(`${BASE}/variants.json?sku=${encodeURIComponent(sku)}&limit=5`, { headers: HEADERS })
-    )
-
-    const [locRes, firstOrdersRes, ...variantResponses] = await Promise.all([
+    // Fetch products (all statuses), locations, first orders page in parallel
+    const [prodRes, locRes, firstOrdersRes] = await Promise.all([
+      fetch(`${BASE}/products.json?limit=250`, { headers: HEADERS }),
       fetch(`${BASE}/locations.json`, { headers: HEADERS }),
-      fetch(`${BASE}/orders.json?status=any&financial_status=paid&created_at_min=${since30.toISOString()}&limit=250&fields=id,line_items,shipping_address`, { headers: HEADERS }),
-      ...skuLookups
+      fetch(`${BASE}/orders.json?status=any&financial_status=paid&created_at_min=${since30.toISOString()}&limit=250&fields=id,line_items,shipping_address`, { headers: HEADERS })
     ])
 
+    if (!prodRes.ok) throw new Error(`Shopify products error: ${prodRes.status}`)
     if (!locRes.ok) throw new Error(`Shopify locations error: ${locRes.status}`)
 
-    const locData = await locRes.json()
-    const locations = locData.locations.filter(l => l.active)
-    const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
+    const [prodData, locData] = await Promise.all([prodRes.json(), locRes.json()])
 
-    // Build SKU -> inventory_item_id map from variant lookups
+    // Build inventory_item_id -> SKU map from page 1
     const itemToSku = {}
-    const skuToItemId = {}
-
-    const variantData = await Promise.all(variantResponses.map(r => r.ok ? r.json() : { variants: [] }))
-    for (const data of variantData) {
-      for (const v of data.variants || []) {
-        if (v.sku && v.inventory_item_id) {
-          itemToSku[v.inventory_item_id] = v.sku
-          skuToItemId[v.sku] = v.inventory_item_id
+    for (const product of prodData.products) {
+      for (const variant of product.variants) {
+        if (variant.sku && variant.inventory_item_id) {
+          itemToSku[variant.inventory_item_id] = variant.sku
         }
       }
     }
 
-    // Step 2: Get AU warehouse stock using exact inventory item IDs
-    const auStockBySku = {}
-    if (auLocation) {
-      const trackedItemIds = Object.keys(SKU_MAP).map(sku => skuToItemId[sku]).filter(Boolean)
-      if (trackedItemIds.length > 0) {
-        const invRes = await fetch(
-          `${BASE}/inventory_levels.json?location_id=${auLocation.id}&inventory_item_ids=${trackedItemIds.join(',')}&limit=250`,
-          { headers: HEADERS }
-        )
-        if (invRes.ok) {
-          const invData = await invRes.json()
-          for (const level of invData.inventory_levels) {
-            const sku = itemToSku[level.inventory_item_id]
-            if (!sku) continue
-            auStockBySku[sku] = Math.max(0, level.available || 0)
+    // Fetch page 2 of products if needed (for missing SKUs)
+    const foundSKUs = new Set(Object.values(itemToSku))
+    const missingCount = Object.keys(SKU_MAP).filter(s => !foundSKUs.has(s)).length
+    if (missingCount > 0 && prodData.products.length === 250) {
+      const lastId = prodData.products[prodData.products.length - 1].id
+      const prod2Res = await fetch(`${BASE}/products.json?limit=250&since_id=${lastId}`, { headers: HEADERS })
+      if (prod2Res.ok) {
+        const prod2Data = await prod2Res.json()
+        for (const product of prod2Data.products) {
+          for (const variant of product.variants) {
+            if (variant.sku && variant.inventory_item_id) {
+              itemToSku[variant.inventory_item_id] = variant.sku
+            }
           }
         }
       }
     }
 
-    // Step 3: Process orders with pagination
+    const locations = locData.locations.filter(l => l.active)
+    const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
+
+    // Get ALL inventory levels for AU location (no item ID filter) then match by SKU
+    const auStockBySku = {}
+    if (auLocation) {
+      let invUrl = `${BASE}/inventory_levels.json?location_id=${auLocation.id}&limit=250`
+      while (invUrl) {
+        const invRes = await fetch(invUrl, { headers: HEADERS })
+        if (!invRes.ok) break
+        const invData = await invRes.json()
+        for (const level of invData.inventory_levels) {
+          const sku = itemToSku[level.inventory_item_id]
+          if (!sku || !TRACKED_SKUS.has(sku)) continue
+          auStockBySku[sku] = Math.max(0, level.available || 0)
+        }
+        const linkHeader = invRes.headers.get('Link') || ''
+        const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
+        invUrl = nextMatch ? nextMatch[1] : null
+      }
+    }
+
+    // Process orders with pagination
     const soldBySkuUS = {}
     const soldBySkuAU = {}
     let totalOrders = 0
@@ -112,7 +123,7 @@ export default async function handler(req, res) {
       currentRes = nextMatch ? await fetch(nextMatch[1], { headers: HEADERS }) : null
     }
 
-    // Step 4: Build response
+    // Build response
     const auStockByProduct = {}
     const velocityUSByProduct = {}
     const velocityAUByProduct = {}
@@ -132,7 +143,7 @@ export default async function handler(req, res) {
       au_location: auLocation?.name || 'not found',
       orders_analysed: totalOrders,
       period_days: 30,
-      skus_found: Object.keys(skuToItemId).length,
+      item_ids_mapped: Object.keys(itemToSku).length,
     })
 
   } catch (err) {
