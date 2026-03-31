@@ -45,7 +45,6 @@ export default async function handler(req, res) {
     for (const p of prodData.products) {
       for (const v of p.variants) {
         if (v.sku && v.inventory_item_id) {
-          // Store as both string and number to handle type mismatches
           itemToSku[String(v.inventory_item_id)] = v.sku
           skuToItemId[v.sku] = String(v.inventory_item_id)
         }
@@ -55,30 +54,45 @@ export default async function handler(req, res) {
     const locations = locData.locations.filter(l => l.active)
     const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
 
-    // Get inventory levels — no ID filter, match all by SKU
+    // Try fetching inventory using item IDs directly (not location filter)
+    // Use the 4 known working item IDs first as a test
+    const allItemIds = Object.keys(SKU_MAP).map(s => skuToItemId[s]).filter(Boolean)
+    
+    let invStatus = 'not attempted'
+    let invBody = null
     const auStockBySku = {}
-    let invLevelCount = 0
-    let matchedCount = 0
-    if (auLocation) {
-      let invUrl = `${BASE}/inventory_levels.json?location_id=${auLocation.id}&limit=250`
-      while (invUrl) {
-        const invRes = await fetch(invUrl, { headers: HEADERS })
-        if (!invRes.ok) break
+
+    if (auLocation && allItemIds.length > 0) {
+      // Try with inventory_item_ids filter
+      const invUrl = `${BASE}/inventory_levels.json?location_id=${auLocation.id}&inventory_item_ids=${allItemIds.join(',')}&limit=250`
+      const invRes = await fetch(invUrl, { headers: HEADERS })
+      invStatus = invRes.status
+      
+      if (invRes.ok) {
         const invData = await invRes.json()
-        invLevelCount += (invData.inventory_levels || []).length
+        invBody = invData.inventory_levels?.length
         for (const level of invData.inventory_levels || []) {
           const sku = itemToSku[String(level.inventory_item_id)]
-          if (!sku || !TRACKED_SKUS.has(sku)) continue
-          matchedCount++
+          if (!sku) continue
           auStockBySku[sku] = Math.max(0, level.available || 0)
         }
-        const linkHeader = invRes.headers.get('Link') || ''
-        const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
-        invUrl = nextMatch ? nextMatch[1] : null
+      } else {
+        // Try without location filter — just by item IDs
+        const invRes2 = await fetch(`${BASE}/inventory_levels.json?inventory_item_ids=${allItemIds.join(',')}&limit=250`, { headers: HEADERS })
+        if (invRes2.ok) {
+          const invData2 = await invRes2.json()
+          // Find the AU location's levels
+          for (const level of invData2.inventory_levels || []) {
+            if (String(level.location_id) !== String(auLocation.id)) continue
+            const sku = itemToSku[String(level.inventory_item_id)]
+            if (!sku) continue
+            auStockBySku[sku] = Math.max(0, level.available || 0)
+          }
+        }
       }
     }
 
-    // Process orders with pagination
+    // Process orders
     const soldBySkuUS = {}
     const soldBySkuAU = {}
     let totalOrders = 0
@@ -120,13 +134,6 @@ export default async function handler(req, res) {
       velocityAUByProduct[productName] = +((soldBySkuAU[sku] || 0) / 30).toFixed(1)
     }
 
-    // Debug: show what we found for the missing SKUs
-    const debugMissing = ['BB-MANLY','SCALP-MANLY','CW-MANLY','SSC&C'].map(sku => ({
-      sku,
-      item_id: skuToItemId[sku] || 'NOT FOUND',
-      stock: auStockBySku[sku] ?? 'not in levels'
-    }))
-
     return res.json({
       ok: true,
       source: 'shopify',
@@ -134,10 +141,16 @@ export default async function handler(req, res) {
       velocity_us: velocityUSByProduct,
       velocity_au: velocityAUByProduct,
       au_location: auLocation?.name || 'not found',
-      au_location_id: auLocation?.id || null,
+      au_location_id: auLocation?.id,
       orders_analysed: totalOrders,
       period_days: 30,
-      debug: { skus_mapped: Object.keys(skuToItemId).length, inv_levels_returned: invLevelCount, matched: matchedCount, missing_skus: debugMissing }
+      debug: {
+        skus_mapped: Object.keys(skuToItemId).length,
+        item_ids: allItemIds,
+        inv_api_status: invStatus,
+        inv_levels_count: invBody,
+        au_stock_found: Object.keys(auStockBySku).length
+      }
     })
 
   } catch (err) {
