@@ -75,9 +75,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .prod-opt:last-child{border-bottom:none}.prod-opt:hover{background:var(--bg2)}
 @media(max-width:700px){.g4{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}.frow,.frow3{grid-template-columns:1fr}}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 <div id="mroot"></div>
+<div id="app" style="display:none">
 <div class="sfh">
   <div class="sfb">Stockflow</div>
   <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -85,7 +87,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <span style="font-size:12px;padding:3px 10px;border:0.5px solid var(--border);border-radius:99px;color:var(--text2)">🇦🇺 Internal WH</span>
     <button class="btn" id="sh-btn" style="font-size:12px;padding:4px 10px">◯ ShipHero</button>
     <button class="btn" id="sk-btn" style="font-size:12px;padding:4px 10px">◯ Shopify</button>
-    <a href="/" style="font-size:12px;padding:4px 12px;border:0.5px solid var(--border2);border-radius:99px;color:var(--text2);text-decoration:none">Sign out</a>
+    <a href="/" style="font-size:12px;padding:4px 12px;border:0.5px solid var(--border2);border-radius:99px;color:var(--text2);text-decoration:none" onclick="event.preventDefault();doSignOut()">Sign out</a>
   </div>
 </div>
 <div class="tnav" id="tnav"></div>
@@ -102,6 +104,88 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div id="tab-boxes" class="tab-content"></div>
 </div>
 <script>
+// ─── SUPABASE AUTH ───────────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://ksytaupgwsnvzbcnvpku.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtzeXRhdXBnd3Nudnp'
+  + 'iY252cGt1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMzMDI4NzEsImV4cCI6MjA1ODg3ODg3MX0.ozLJRU0pXgh3YXJcihVRFp1Hr6YNn8nU2KAPSgijamU';
+
+const _supa = window.supabase?.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+async function checkAuth() {
+  if (!_supa) { showApp(); return; }
+  const { data: { session } } = await _supa.auth.getSession();
+  if (session) {
+    showApp();
+  } else {
+    showLogin();
+  }
+}
+
+function showLogin() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  // Allow enter key to submit
+  document.getElementById('auth-password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+  document.getElementById('auth-email').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('auth-password').focus();
+  });
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = '';
+}
+
+async function doLogin() {
+  if (!_supa) { showApp(); return; }
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const errEl = document.getElementById('login-error');
+  const btn = document.getElementById('login-btn');
+  const loading = document.getElementById('login-loading');
+
+  if (!email || !password) {
+    errEl.textContent = 'Please enter your email and password.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.style.display = 'none';
+  loading.style.display = 'block';
+  errEl.style.display = 'none';
+
+  const { error } = await _supa.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    errEl.textContent = error.message || 'Invalid email or password.';
+    errEl.style.display = 'block';
+    btn.style.display = 'block';
+    loading.style.display = 'none';
+  } else {
+    showApp();
+    // Auto-connect after login
+    syncShopify(document.getElementById('sk-btn'));
+    syncShipHero(document.getElementById('sh-btn'));
+  }
+}
+
+async function doSignOut() {
+  if (_supa) await _supa.auth.signOut();
+  showLogin();
+  document.getElementById('auth-email').value = '';
+  document.getElementById('auth-password').value = '';
+}
+
+// Check auth on page load (replaces the auto-connect in window.load)
+window.addEventListener('load', () => {
+  checkAuth().then(() => {
+    // Auto-connect only runs after auth check in showApp
+  });
+});
+
+
 var VELOCITY_PERIOD=30;
 var DAILY_REV=0;
 var DAILY_ORDERS=0;
@@ -171,7 +255,8 @@ async function syncShipHero(btn){
 async function syncShopify(btn){
   btn.textContent='⟳ Shopify…';btn.disabled=true;
   try{
-    const r=await fetch('/api/live/shopify?days='+VELOCITY_PERIOD);
+    const forceRefresh=btn.dataset.force==='1';delete btn.dataset.force;
+    const r=await fetch('/api/live/shopify?days='+VELOCITY_PERIOD+(forceRefresh?'&refresh=1':''));
     const d=await r.json();
     if(!r.ok||d.error)throw new Error(d.error||'Shopify error');
     if(d.au_stock){for(const[product,qty]of Object.entries(d.au_stock)){STOCK.vi[product]=qty}}
@@ -184,7 +269,9 @@ async function syncShopify(btn){
     if(d.orders_analysed&&d.period_days)DAILY_ORDERS=d.orders_analysed/d.period_days;
     if(d.period_days)VELOCITY_PERIOD=d.period_days;
     skConnected=true;
-    btn.textContent='● Shopify';btn.style.color='var(--green)';btn.disabled=false;
+    btn.textContent=d.cached?'● Shopify (cached)':'● Shopify';btn.style.color='var(--green)';btn.disabled=false;
+    btn.title=d.cached?'Cached at '+new Date(d.cached_at).toLocaleTimeString()+' — click to refresh':'Live data';
+    btn.ondblclick=()=>{btn.dataset.force='1';syncShopify(btn)};
     rActive();
   }catch(e){
     btn.textContent='✕ Shopify';btn.style.color='var(--red)';btn.disabled=false;
@@ -1018,5 +1105,29 @@ document.getElementById('tab-packaging').addEventListener('input',e=>{
 });
 switchTab(activeTab);
 </script>
+
+</div>
 </body>
-</html>
+</html
+<!-- Login Screen -->
+<div id="login-screen" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center">
+  <div style="width:100%;max-width:380px;padding:0 24px">
+    <div style="text-align:center;margin-bottom:32px">
+      <div style="font-size:24px;font-weight:700;letter-spacing:-.5px;margin-bottom:6px">Stockflow</div>
+      <div style="font-size:13px;color:var(--text2)">Sign in to continue</div>
+    </div>
+    <div id="login-error" style="display:none;background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px"></div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:6px">Email</div>
+      <input id="auth-email" type="email" class="ri" placeholder="you@example.com" style="width:100%;box-sizing:border-box">
+    </div>
+    <div style="margin-bottom:20px">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:6px">Password</div>
+      <input id="auth-password" type="password" class="ri" placeholder="••••••••" style="width:100%;box-sizing:border-box">
+    </div>
+    <button id="login-btn" class="btn btp" style="width:100%;padding:12px;font-size:14px" onclick="doLogin()">Sign in</button>
+    <div id="login-loading" style="display:none;text-align:center;padding:12px;font-size:13px;color:var(--text2)">Signing in…</div>
+  </div>
+</div>
+
+>
