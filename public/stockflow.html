@@ -75,7 +75,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .prod-opt:last-child{border-bottom:none}.prod-opt:hover{background:var(--bg2)}
 @media(max-width:700px){.g4{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}.frow,.frow3{grid-template-columns:1fr}}
 </style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 <div id="mroot"></div>
@@ -104,16 +103,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div id="tab-boxes" class="tab-content"></div>
 </div>
 <script>
-// ─── SUPABASE AUTH ───────────────────────────────────────────────────────────
-const SUPABASE_URL = 'https://ksytaupgwsnvzbcnvpku.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtzeXRhdXBnd3NudnpiY252cGt1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1MDk0NDEsImV4cCI6MjA5MDA4NTQ0MX0.ozLJRU0pXgh3YXJcihVRFp1Hr6YNn8nU2KAPSgijamU';
+// ─── SIMPLE PASSWORD AUTH ────────────────────────────────────────────────────
+// Change this password to whatever you want
+const APP_PASSWORD = 'manly2026';
+const AUTH_KEY = 'sf_auth_v1';
 
-const _supa = window.supabase?.createClient(SUPABASE_URL, SUPABASE_ANON);
-
-async function checkAuth() {
-  if (!_supa) { showApp(); return; }
-  const { data: { session } } = await _supa.auth.getSession();
-  if (session) {
+function checkAuth() {
+  if (localStorage.getItem(AUTH_KEY) === 'ok') {
     showApp();
   } else {
     showLogin();
@@ -123,12 +119,8 @@ async function checkAuth() {
 function showLogin() {
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
-  // Allow enter key to submit
   document.getElementById('auth-password').addEventListener('keydown', e => {
     if (e.key === 'Enter') doLogin();
-  });
-  document.getElementById('auth-email').addEventListener('keydown', e => {
-    if (e.key === 'Enter') document.getElementById('auth-password').focus();
   });
 }
 
@@ -137,52 +129,31 @@ function showApp() {
   document.getElementById('app').style.display = '';
 }
 
-async function doLogin() {
-  if (!_supa) { showApp(); return; }
-  const email = document.getElementById('auth-email').value.trim();
+function doLogin() {
   const password = document.getElementById('auth-password').value;
   const errEl = document.getElementById('login-error');
   const btn = document.getElementById('login-btn');
-  const loading = document.getElementById('login-loading');
 
-  if (!email || !password) {
-    errEl.textContent = 'Please enter your email and password.';
-    errEl.style.display = 'block';
-    return;
-  }
-
-  btn.style.display = 'none';
-  loading.style.display = 'block';
-  errEl.style.display = 'none';
-
-  const { error } = await _supa.auth.signInWithPassword({ email, password });
-
-  if (error) {
-    errEl.textContent = error.message || 'Invalid email or password.';
-    errEl.style.display = 'block';
-    btn.style.display = 'block';
-    loading.style.display = 'none';
-  } else {
+  if (password === APP_PASSWORD) {
+    localStorage.setItem(AUTH_KEY, 'ok');
     showApp();
-    // Auto-connect after login
     syncShopify(document.getElementById('sk-btn'));
     syncShipHero(document.getElementById('sh-btn'));
+  } else {
+    errEl.textContent = 'Incorrect password.';
+    errEl.style.display = 'block';
+    btn.style.display = 'block';
   }
 }
 
-async function doSignOut() {
-  if (_supa) await _supa.auth.signOut();
+function doSignOut() {
+  localStorage.removeItem(AUTH_KEY);
   showLogin();
-  document.getElementById('auth-email').value = '';
   document.getElementById('auth-password').value = '';
+  document.getElementById('login-error').style.display = 'none';
 }
 
-// Check auth on page load (replaces the auto-connect in window.load)
-window.addEventListener('load', () => {
-  checkAuth().then(() => {
-    // Auto-connect only runs after auth check in showApp
-  });
-});
+window.addEventListener('load', () => { checkAuth(); });
 
 
 var VELOCITY_PERIOD=30;
@@ -1110,22 +1081,17 @@ switchTab(activeTab);
 </html
 <!-- Login Screen -->
 <div id="login-screen" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center">
-  <div style="width:100%;max-width:380px;padding:0 24px">
+  <div style="width:100%;max-width:360px;padding:0 24px">
     <div style="text-align:center;margin-bottom:32px">
       <div style="font-size:24px;font-weight:700;letter-spacing:-.5px;margin-bottom:6px">Stockflow</div>
-      <div style="font-size:13px;color:var(--text2)">Sign in to continue</div>
+      <div style="font-size:13px;color:var(--text2)">Enter password to continue</div>
     </div>
     <div id="login-error" style="display:none;background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px"></div>
-    <div style="margin-bottom:14px">
-      <div style="font-size:13px;color:var(--text2);margin-bottom:6px">Email</div>
-      <input id="auth-email" type="email" class="ri" placeholder="you@example.com" style="width:100%;box-sizing:border-box">
-    </div>
     <div style="margin-bottom:20px">
       <div style="font-size:13px;color:var(--text2);margin-bottom:6px">Password</div>
       <input id="auth-password" type="password" class="ri" placeholder="••••••••" style="width:100%;box-sizing:border-box">
     </div>
     <button id="login-btn" class="btn btp" style="width:100%;padding:12px;font-size:14px" onclick="doLogin()">Sign in</button>
-    <div id="login-loading" style="display:none;text-align:center;padding:12px;font-size:13px;color:var(--text2)">Signing in…</div>
   </div>
 </div>
 
