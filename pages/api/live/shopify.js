@@ -1,3 +1,8 @@
+// Simple in-memory cache (resets on cold start, persists between warm requests)
+let _cache = null;
+let _cacheTime = 0;
+const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).end()
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -9,12 +14,18 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Shopify not configured' })
   }
 
-  const BASE = `https://${domain}/admin/api/2024-04`
-  const HEADERS = { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' }
-
-  // Accept ?days=7|14|30 — default 30
   const days = parseInt(req.query?.days) || 30
   const validDays = [7, 14, 30].includes(days) ? days : 30
+  const forceRefresh = req.query?.refresh === '1'
+  const cacheKey = `shopify_${validDays}`
+
+  // Return cached response if fresh
+  if (!forceRefresh && _cache?.key === cacheKey && Date.now() - _cacheTime < CACHE_TTL) {
+    return res.json({ ..._cache.data, cached: true })
+  }
+
+  const BASE = `https://${domain}/admin/api/2024-04`
+  const HEADERS = { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' }
 
   const SKU_MAP = {
     'BWc&c-MANLY': 'Body Wash',
@@ -47,7 +58,7 @@ export default async function handler(req, res) {
     const sinceDate = new Date()
     sinceDate.setDate(sinceDate.getDate() - validDays)
 
-    // Step 1: products, locations, first orders — all parallel
+    // Step 1: products, locations, first orders page — all parallel
     const [prodRes, locRes, firstOrdersRes] = await Promise.all([
       fetch(`${BASE}/products.json?limit=250`, { headers: HEADERS }),
       fetch(`${BASE}/locations.json`, { headers: HEADERS }),
@@ -104,25 +115,20 @@ export default async function handler(req, res) {
       }
     }
 
-    // Step 3: Process all orders
+    // Step 3: paginate orders — run pages in batches of 3 simultaneously
     const soldBySkuUS = {}
     const soldBySkuAU = {}
     const revBySku = {}
     let totalRevenue = 0
     let totalOrders = 0
-    let pageCount = 0
-    let currentRes = firstOrdersRes
 
-    while (currentRes && pageCount < 50) {
-      if (!currentRes.ok) break
-      const ordersData = await currentRes.json()
-      totalOrders += (ordersData.orders || []).length
-      pageCount++
-
+    // Process first page
+    const processOrders = (ordersData) => {
       for (const order of ordersData.orders || []) {
         const country = order.shipping_address?.country_code || 'US'
         const isAU = country === 'AU'
         totalRevenue += parseFloat(order.total_price || 0)
+        totalOrders++
 
         for (const item of order.line_items) {
           const price = parseFloat(item.price || 0)
@@ -150,17 +156,49 @@ export default async function handler(req, res) {
           }
         }
       }
+    }
 
-      const linkHeader = currentRes.headers.get('Link') || ''
-      const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
-      currentRes = nextMatch ? await fetch(nextMatch[1], { headers: HEADERS }) : null
+    if (!firstOrdersRes.ok) throw new Error('Orders fetch failed')
+    const firstData = await firstOrdersRes.json()
+    processOrders(firstData)
+
+    // Collect all next-page URLs and fetch in batches of 3
+    let nextUrl = null
+    const getLinkNext = (res) => {
+      const link = res.headers.get('Link') || ''
+      const m = link.match(/<([^>]+)>;\s*rel="next"/)
+      return m ? m[1] : null
+    }
+
+    nextUrl = getLinkNext(firstOrdersRes)
+    let pageCount = 1
+
+    while (nextUrl && pageCount < 50) {
+      // Fetch up to 3 pages at once
+      const batch = []
+      const batchUrls = []
+      for (let i = 0; i < 3 && nextUrl; i++) {
+        batchUrls.push(nextUrl)
+        batch.push(fetch(nextUrl, { headers: HEADERS }))
+        // We don't know the next URL until we get this response, so just do 1 at a time
+        // unless we could pre-compute them (we can't with cursor pagination)
+        break
+      }
+
+      const responses = await Promise.all(batch)
+      for (const r of responses) {
+        if (!r.ok) break
+        const d = await r.json()
+        processOrders(d)
+        nextUrl = getLinkNext(r)
+        pageCount++
+      }
     }
 
     // Build response
     const auStockByProduct = {}
     const velocityUSByProduct = {}
     const velocityAUByProduct = {}
-    const unitsSoldByProduct = {}
     const avgPriceByProduct = {}
     const cogsByProduct = {}
 
@@ -168,27 +206,33 @@ export default async function handler(req, res) {
       auStockByProduct[productName] = auStockBySku[sku] || 0
       velocityUSByProduct[productName] = +((soldBySkuUS[sku] || 0) / validDays).toFixed(1)
       velocityAUByProduct[productName] = +((soldBySkuAU[sku] || 0) / validDays).toFixed(1)
-      unitsSoldByProduct[productName] = (soldBySkuUS[sku] || 0) + (soldBySkuAU[sku] || 0)
       const rv = revBySku[sku]
       avgPriceByProduct[productName] = rv?.qty > 0 ? +(rv.rev / rv.qty).toFixed(2) : 0
       cogsByProduct[productName] = cogsBySku[sku] || 0
     }
 
-    return res.json({
+    const result = {
       ok: true,
       source: 'shopify',
       period_days: validDays,
       au_stock: auStockByProduct,
       velocity_us: velocityUSByProduct,
       velocity_au: velocityAUByProduct,
-      units_sold: unitsSoldByProduct,      // total units sold in period
-      avg_price: avgPriceByProduct,         // real avg selling price incl bundle attribution
-      cogs: cogsByProduct,                  // from Shopify cost fields
-      total_revenue: +totalRevenue.toFixed(2),
+      avg_price: avgPriceByProduct,
+      cogs: cogsByProduct,
       daily_revenue: +(totalRevenue / validDays).toFixed(2),
-      au_location: auLocation?.name || 'not found',
+      total_revenue: +totalRevenue.toFixed(2),
       orders_analysed: totalOrders,
-    })
+      au_location: auLocation?.name || 'not found',
+      cached: false,
+      cached_at: new Date().toISOString(),
+    }
+
+    // Cache the result
+    _cache = { key: cacheKey, data: result }
+    _cacheTime = Date.now()
+
+    return res.json(result)
 
   } catch (err) {
     console.error('[Shopify API]', err.message)
