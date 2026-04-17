@@ -1028,14 +1028,13 @@ function rBoxTracker() {
     const onHandAU = BOX_STOCK[bo.id+'_au'] || 0;
     const onHandUS = BOX_STOCK[bo.id+'_us'] || 0;
     const onHand   = onHandAU + onHandUS;
-    const inbound = inb[bo.id] || 0;
-    const consumed = used[bo.id] || 0;
-    const dailyUse = hasPkgData ? +(consumed / pkgPeriod).toFixed(1) : 0;
-    const remaining = onHand - consumed;
-    const total = onHand + inbound;
-    const daysLeft = dailyUse > 0 ? Math.floor(remaining / dailyUse) : null;
+    const inbound  = inb[bo.id] || 0;           // info only — not added to on hand
+    const consumed = used[bo.id] || 0;           // actual used in period
+    const dailyUse = hasPkgData && pkgPeriod > 0 ? +(consumed / pkgPeriod).toFixed(1) : 0;
+    const remaining = Math.max(0, onHand - consumed); // on hand minus what's been used
+    const daysLeft = dailyUse > 0 ? Math.floor(onHand / dailyUse) : null; // days until out based on on hand
     const status = daysLeft === null ? null : daysLeft <= 7 ? 'critical' : daysLeft <= 14 ? 'watch' : 'good';
-    return { bo, onHand, onHandAU, onHandUS, inbound, consumed, dailyUse, remaining, total, daysLeft, status };
+    return { bo, onHand, onHandAU, onHandUS, inbound, consumed, dailyUse, remaining, daysLeft, status };
   });
 
   el.innerHTML = `
@@ -1063,8 +1062,8 @@ function rBoxTracker() {
           <th style="text-align:right">Inbound (POs)</th>
           <th style="text-align:right">Total avail.</th>
           <th style="text-align:right">Used (${pkgPeriod}d)</th>
-          <th style="text-align:right">Daily use</th>
           <th style="text-align:right">Remaining</th>
+          <th style="text-align:right">Daily use</th>
           <th style="text-align:right">Days left</th>
           <th style="text-align:right">Status</th>
         </tr></thead>
@@ -1079,10 +1078,9 @@ function rBoxTracker() {
             <div style="font-size:10px;color:var(--text2)">🇦🇺 ${fm(r.onHandAU)} · 🇺🇸 ${fm(r.onHandUS)}</div>
           </td>
           <td style="text-align:right;color:var(--blue)">${r.inbound ? '+'+fm(r.inbound) : '—'}</td>
-          <td style="text-align:right;font-weight:600">${fm(r.total)}</td>
           <td style="text-align:right">${hasPkgData ? fm(r.consumed) : '—'}</td>
+          <td style="text-align:right;font-weight:600">${hasPkgData ? fm(r.remaining) : '—'}</td>
           <td style="text-align:right">${hasPkgData && r.dailyUse ? r.dailyUse+'/d' : '—'}</td>
-          <td style="text-align:right;font-weight:600;${r.remaining < 0 ? 'color:var(--red)' : ''}">${hasPkgData ? fm(r.remaining) : '—'}</td>
           <td style="text-align:right;font-weight:600">${r.daysLeft !== null ? r.daysLeft+'d' : '—'}</td>
           <td style="text-align:right">${r.status ? `<span class="bdg ${r.status==='critical'?'brd':r.status==='watch'?'bwn':'bok'}">${r.status==='critical'?'Critical':r.status==='watch'?'Watch':'Good'}</span>` : '<span style="color:var(--text3)">—</span>'}</td>
         </tr>`).join('')}
@@ -1099,7 +1097,7 @@ function rBoxTracker() {
             <div style="font-size:12px;color:var(--text2);margin-bottom:4px">${r.bo.name}</div>
             <div style="font-size:22px;font-weight:700;${r.daysLeft!==null&&r.daysLeft<=7?'color:var(--red)':r.daysLeft!==null&&r.daysLeft<=14?'color:var(--warn)':''}">${r.daysLeft !== null ? r.daysLeft+'d' : '—'}</div>
             ${depDate ? `<div style="font-size:11px;color:var(--text2);margin-top:2px">Runs out ~${depDate}</div>` : ''}
-            <div style="font-size:11px;color:var(--text3);margin-top:2px">${fm(r.remaining)} left · ${r.dailyUse}/d</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">${fm(r.remaining)} remaining · ${r.dailyUse}/d</div>
           </div>`;
         }).join('')}
       </div>
