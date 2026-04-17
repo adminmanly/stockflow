@@ -1025,7 +1025,9 @@ function rBoxTracker() {
   const hasPkgData = pkgOrders.length > 0;
 
   const rows = BOX_TYPES.map(bo => {
-    const onHand  = BOX_STOCK[bo.id] || 0;
+    const onHandAU = BOX_STOCK[bo.id+'_au'] || 0;
+    const onHandUS = BOX_STOCK[bo.id+'_us'] || 0;
+    const onHand   = onHandAU + onHandUS;
     const inbound = inb[bo.id] || 0;
     const consumed = used[bo.id] || 0;
     const dailyUse = hasPkgData ? +(consumed / pkgPeriod).toFixed(1) : 0;
@@ -1033,7 +1035,7 @@ function rBoxTracker() {
     const total = onHand + inbound;
     const daysLeft = dailyUse > 0 ? Math.floor(remaining / dailyUse) : null;
     const status = daysLeft === null ? null : daysLeft <= 7 ? 'critical' : daysLeft <= 14 ? 'watch' : 'good';
-    return { bo, onHand, inbound, consumed, dailyUse, remaining, total, daysLeft, status };
+    return { bo, onHand, onHandAU, onHandUS, inbound, consumed, dailyUse, remaining, total, daysLeft, status };
   });
 
   el.innerHTML = `
@@ -1072,7 +1074,10 @@ function rBoxTracker() {
             <div style="font-weight:600;font-size:13px">${r.bo.name}</div>
             <div style="font-size:11px;color:var(--text2)">${r.bo.desc}</div>
           </td>
-          <td style="text-align:right">${fm(r.onHand)}</td>
+          <td style="text-align:right">
+            <div style="font-weight:600">${fm(r.onHand)}</div>
+            <div style="font-size:10px;color:var(--text2)">🇦🇺 ${fm(r.onHandAU)} · 🇺🇸 ${fm(r.onHandUS)}</div>
+          </td>
           <td style="text-align:right;color:var(--blue)">${r.inbound ? '+'+fm(r.inbound) : '—'}</td>
           <td style="text-align:right;font-weight:600">${fm(r.total)}</td>
           <td style="text-align:right">${hasPkgData ? fm(r.consumed) : '—'}</td>
@@ -1102,28 +1107,42 @@ function rBoxTracker() {
 }
 
 function openBoxStockEditor() {
+  const warehouses = [
+    {id:'au', name:'🇦🇺 Internal WH (Cooper St)'},
+    {id:'us', name:'🇺🇸 Tidal Wave (US)'},
+  ];
+
   const rows = BOX_TYPES.map(bo => `
-    <div style="display:grid;grid-template-columns:1fr 120px;gap:12px;align-items:center;margin-bottom:10px">
-      <div>
-        <div style="font-size:13px;font-weight:600">${bo.name}</div>
-        <div style="font-size:11px;color:var(--text2)">${bo.desc}</div>
+    <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:0.5px solid var(--border)">
+      <div style="font-size:13px;font-weight:600;margin-bottom:2px">${bo.name}</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:8px">${bo.desc}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        ${warehouses.map(wh=>`<div>
+          <div style="font-size:11px;color:var(--text2);margin-bottom:4px">${wh.name}</div>
+          <input class="form-in" type="number" id="box-stock-${bo.id}-${wh.id}" value="${(BOX_STOCK[bo.id+'_'+wh.id])||0}" min="0" placeholder="0">
+        </div>`).join('')}
       </div>
-      <input class="ri" type="number" id="box-stock-${bo.id}" value="${BOX_STOCK[bo.id]||0}" min="0" style="text-align:right">
     </div>`).join('');
 
-  openM(`<div class="ct">Update stock on hand</div>
-    <div style="font-size:12px;color:var(--text2);margin-bottom:14px">Enter your current physical stock count for each box type.</div>
+  openM(`<div class="mbox"><div class="ct">Update box stock on hand</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:16px">Enter your current physical stock count per warehouse for each box type.</div>
     ${rows}
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
       <button class="btn" onclick="closeM()">Cancel</button>
       <button class="btn btp" onclick="saveBoxStockEdit()">Save</button>
-    </div>`);
+    </div></div>`);
 }
 
 function saveBoxStockEdit() {
+  const warehouses = ['au','us'];
   for (const bo of BOX_TYPES) {
-    const val = parseInt(document.getElementById('box-stock-'+bo.id)?.value) || 0;
-    BOX_STOCK[bo.id] = val;
+    let total = 0;
+    for (const wh of warehouses) {
+      const val = parseInt(document.getElementById('box-stock-'+bo.id+'-'+wh)?.value) || 0;
+      BOX_STOCK[bo.id+'_'+wh] = val;
+      total += val;
+    }
+    BOX_STOCK[bo.id] = total; // keep total for consumption calc
   }
   saveBoxStock(BOX_STOCK);
   closeM();
