@@ -181,8 +181,10 @@ let SUPPLIERS=JSON.parse(localStorage.getItem('sf_suppliers')||'null')||DEFAULT_
 let nSup=Math.max(3,SUPPLIERS.reduce((m,s)=>Math.max(m,parseInt(s.id.replace('s',''))||0),0)+1);
 function saveSuppliersLocal(){try{localStorage.setItem('sf_suppliers',JSON.stringify(SUPPLIERS))}catch(e){}}
 const INV_FILES={};
-let POS=[];
-let nPO=1,lineCtx=200,pof={sup:'',fc:'',st:'',df:'',dt:'',prods:[]},aFC='tw',gMode='30',csFrom='',csTo='',tRev=50000,tDays=60,activeTab='po',modalPayments=[],lineIds=[];
+function savePOsLocal(){try{localStorage.setItem('sf_pos',JSON.stringify(POS))}catch(e){}}
+let POS=JSON.parse(localStorage.getItem('sf_pos')||'[]');
+let nPO=Math.max(1,(POS.reduce((m,p)=>{const n=parseInt((p.id||'').replace(/[^0-9]/g,''))||0;return Math.max(m,n)},0)+1));
+let _unused=1,lineCtx=200,pof={sup:'',fc:'',st:'',df:'',dt:'',prods:[]},aFC='tw',gMode='30',csFrom='',csTo='',tRev=50000,tDays=60,activeTab='po',modalPayments=[],lineIds=[];
 const STOCK={tw:{},vi:{}};const AVG_PRICE={};const COGS={};
 const DAILY={tw:{},vi:{}};
 let shConnected=false,skConnected=false;
@@ -268,7 +270,7 @@ function openM(html){const r=document.getElementById('mroot');r.innerHTML=`<div 
 function closeM(){document.getElementById('mroot').innerHTML=''}
 function sPill(po){const s=SC[po.status]||{bg:'#eee',tc:'#333'};const opts=Object.entries(SC).map(([k,v])=>`<div class="sopt" style="background:${v.bg};color:${v.tc}" onclick="setSt(event,'${po.id}','${k}')">${k}</div>`).join('');return`<span class="spill" style="background:${s.bg};color:${s.tc}" onclick="togDrop(event,'${po.id}')">${po.status} ▾<span class="sdrop" id="sd-${po.id}">${opts}</span></span>`}
 function togDrop(e,id){e.stopPropagation();const d=document.getElementById('sd-'+id);if(!d)return;const open=d.style.display==='block';document.querySelectorAll('.sdrop').forEach(x=>x.style.display='none');if(!open){d.style.display='block';setTimeout(()=>document.addEventListener('click',()=>document.querySelectorAll('.sdrop').forEach(x=>x.style.display='none'),{once:true}),30)}}
-function setSt(e,id,st){e.stopPropagation();const po=POS.find(p=>p.id===id);if(!po)return;po.status=st;if(st!=='Draft')po.appr=true;document.querySelectorAll('.sdrop').forEach(x=>x.style.display='none');rActive()}
+function setSt(e,id,st){e.stopPropagation();const po=POS.find(p=>p.id===id);if(!po)return;po.status=st;if(st!=='Draft')po.appr=true;savePOsLocal();document.querySelectorAll('.sdrop').forEach(x=>x.style.display='none');rActive()}
 function prodDropHtml(q){let html='';for(const[grp,prods]of Object.entries(SHOPIFY_PRODUCTS)){const match=prods.filter(p=>!q||p.t.toLowerCase().includes(q.toLowerCase())||(p.sku&&p.sku.toLowerCase().includes(q.toLowerCase())));if(!match.length)continue;html+=`<div class="prod-group-hdr">${grp}</div>`;match.forEach(p=>{html+=`<div class="prod-opt" onclick="selProd(event,'${p.t}','${p.sku||''}')"><span>${p.t}${p.sku?` <span style="color:var(--text2);font-size:11px">· ${p.sku}</span>`:''}</span><span style="font-size:11px;color:var(--text2)">$${p.p.toFixed(2)}</span></div>`})}return html||'<div style="padding:10px;font-size:13px;color:var(--text2)">No products</div>'}
 function prodPickerHtml(lid,selTitle=''){return`<div style="position:relative"><input class="form-in" id="pp-s-${lid}" placeholder="Search products…" autocomplete="off" value="${selTitle}" oninput="filterProds('${lid}')" onfocus="showPD('${lid}')"><input type="hidden" id="pp-v-${lid}" value="${selTitle}"><div id="pp-d-${lid}" style="display:none;position:absolute;top:calc(100%+2px);left:0;right:0;z-index:400;background:var(--bg1);border:0.5px solid var(--border2);border-radius:var(--radius);max-height:200px;overflow-y:auto;box-shadow:0 4px 14px rgba(0,0,0,.12)">${prodDropHtml('')}</div></div>`}
 function filterProds(lid){const q=document.getElementById('pp-s-'+lid)?.value||'';const d=document.getElementById('pp-d-'+lid);if(d){d.innerHTML=prodDropHtml(q);d.style.display='block'}}
@@ -319,8 +321,8 @@ function onSupCh(supId){const s=sup(supId);const el=document.getElementById('sup
 function savePO(pid,appr){
   const lines=lineIds.map(i=>({p:document.getElementById('pp-v-'+i)?.value||'',sku:ALL_PRODS.find(x=>x.t===document.getElementById('pp-v-'+i)?.value)?.sku||'',o:parseInt(document.getElementById('flo-'+i)?.value)||0,r:parseInt(document.getElementById('flr-'+i)?.value)||0,cost:parseFloat(document.getElementById('flc-'+i)?.value)||0})).filter(l=>l.p&&l.o>0);
   const payments=collectMs();const nst=document.getElementById('f-st').value;const supId=document.getElementById('f-sup').value;
-  if(pid){const idx=POS.findIndex(p=>p.id===pid);POS[idx]={...POS[idx],supId,fc:document.getElementById('f-fc').value,status:nst,exp:document.getElementById('f-dt').value,lines,notes:document.getElementById('f-nt').value,appr:appr||POS[idx].appr,payments}}
-  else{POS.push({id:document.getElementById('f-id').value||'PO-00'+nPO,supId,fc:document.getElementById('f-fc').value,status:nst,created:TODAY,exp:document.getElementById('f-dt').value,lines,notes:document.getElementById('f-nt').value,appr,payments});nPO++}
+  if(pid){const idx=POS.findIndex(p=>p.id===pid);POS[idx]={...POS[idx],supId,fc:document.getElementById('f-fc').value,status:nst,exp:document.getElementById('f-dt').value,lines,notes:document.getElementById('f-nt').value,appr:appr||POS[idx].appr,payments};savePOsLocal()}
+  else{POS.push({id:document.getElementById('f-id').value||'PO-00'+nPO,supId,fc:document.getElementById('f-fc').value,status:nst,created:TODAY,exp:document.getElementById('f-dt').value,lines,notes:document.getElementById('f-nt').value,appr,payments});nPO++;savePOsLocal()}
   closeM();rActive()
 }
 function confirmDeletePO(pid){
@@ -337,7 +339,7 @@ function confirmDeletePO(pid){
       <button style="font-size:13px;padding:7px 18px;border:none;border-radius:99px;background:var(--red);color:#fff;cursor:pointer;font-family:inherit;font-weight:600" onclick="deletePO('${pid}')">Yes, delete PO</button>
     </div></div>`);
 }
-function deletePO(pid){const po=POS.find(p=>p.id===pid);if(po)po.payments.forEach(pay=>{delete INV_FILES[pay.id]});POS=POS.filter(p=>p.id!==pid);closeM();rActive()}
+function deletePO(pid){const po=POS.find(p=>p.id===pid);if(po)po.payments.forEach(pay=>{delete INV_FILES[pay.id]});POS=POS.filter(p=>p.id!==pid);savePOsLocal();closeM();rActive()}
 function openPayDetail(pid){
   const po=POS.find(p=>p.id===pid);if(!po)return;
   const s=sup(po.supId);
@@ -367,8 +369,8 @@ function editPayMs(pid,payId){
     <div class="frow"><div><div class="form-lbl">Date paid</div><input class="form-in" type="date" id="ep-pd" value="${p.paidDate||''}"></div><div><div class="form-lbl">Status</div><select class="form-sel" id="ep-s">${['Unpaid','Paid','Overdue'].map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></div></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;padding-top:10px;border-top:0.5px solid var(--border)"><button class="btn" onclick="openPayDetail('${pid}')">Cancel</button><button class="btn btp" onclick="savePayMs('${pid}','${payId}')">Save changes</button></div></div>`);
 }
-function savePayMs(pid,payId){const po=POS.find(p=>p.id===pid);if(!po)return;const p=po.payments.find(x=>x.id===payId);if(!p)return;p.type=document.getElementById('ep-t').value;p.amount=parseFloat(document.getElementById('ep-a').value)||p.amount;p.status=document.getElementById('ep-s').value;p.invNum=document.getElementById('ep-in').value;p.dueDate=document.getElementById('ep-dd').value;p.paidDate=document.getElementById('ep-pd').value;openPayDetail(pid);rActive()}
-function markPaid(pid,payId){const po=POS.find(p=>p.id===pid);if(!po)return;const p=po.payments.find(x=>x.id===payId);if(!p)return;p.status='Paid';p.paidDate=TODAY;openPayDetail(pid);rActive()}
+function savePayMs(pid,payId){const po=POS.find(p=>p.id===pid);if(!po)return;const p=po.payments.find(x=>x.id===payId);if(!p)return;p.type=document.getElementById('ep-t').value;p.amount=parseFloat(document.getElementById('ep-a').value)||p.amount;p.status=document.getElementById('ep-s').value;p.invNum=document.getElementById('ep-in').value;p.dueDate=document.getElementById('ep-dd').value;p.paidDate=document.getElementById('ep-pd').value;savePOsLocal();openPayDetail(pid);rActive()}
+function markPaid(pid,payId){const po=POS.find(p=>p.id===pid);if(!po)return;const p=po.payments.find(x=>x.id===payId);if(!p)return;p.status='Paid';p.paidDate=TODAY;savePOsLocal();openPayDetail(pid);rActive()}
 function sumT(t){const tot=(t?.deposit||0)+(t?.port||0)+(t?.receipt||0);const ok=tot===100;return`<span style="font-size:12px;font-weight:600;color:${ok?'var(--green)':'var(--red)'}">Total: ${tot}% ${ok?'✓':'— must equal 100%'}</span>`}
 function recalcT(){const t={deposit:+document.getElementById('st-d')?.value||0,port:+document.getElementById('st-p')?.value||0,receipt:+document.getElementById('st-r')?.value||0};const el=document.getElementById('terms-tot');if(el)el.innerHTML=sumT(t)}
 function openSupplier(sid){
