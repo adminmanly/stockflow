@@ -201,10 +201,9 @@ async function loadServerData(){
     }
     if(supRes.ok){
       const d=await supRes.json();
-      if(d.suppliers&&d.suppliers.length>0){
-        SUPPLIERS=d.suppliers.map(r=>r.data);
-        nSup=Math.max(3,SUPPLIERS.reduce((m,s)=>Math.max(m,parseInt(s.id.replace('s',''))||0),0)+1);
-      }
+      // Always use server data (even if empty) — don't fall back to localStorage
+      SUPPLIERS=d.suppliers.length>0?d.suppliers.map(r=>r.data):DEFAULT_SUPPLIERS;
+      nSup=Math.max(3,SUPPLIERS.reduce((m,s)=>Math.max(m,parseInt(s.id.replace('s',''))||0),0)+1);
     }
     SUPPLIERS_LOADED=true;
     rActive();
