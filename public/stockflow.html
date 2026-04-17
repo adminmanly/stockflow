@@ -127,7 +127,6 @@ function showLogin() {
 function showApp() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = '';
-  loadServerData();
 }
 
 function doLogin() {
@@ -138,8 +137,10 @@ function doLogin() {
   if (password === APP_PASSWORD) {
     localStorage.setItem(AUTH_KEY, 'ok');
     showApp();
-    syncShopify(document.getElementById('sk-btn'));
-    syncShipHero(document.getElementById('sh-btn'));
+    loadServerData().then(()=>{
+      syncShopify(document.getElementById('sk-btn'));
+      syncShipHero(document.getElementById('sh-btn'));
+    });
   } else {
     errEl.textContent = 'Incorrect password.';
     errEl.style.display = 'block';
@@ -154,7 +155,15 @@ function doSignOut() {
   document.getElementById('login-error').style.display = 'none';
 }
 
-window.addEventListener('load', () => { checkAuth(); });
+window.addEventListener('load', () => {
+  checkAuth();
+  // Always sync from server on every page load (even if already authed)
+  if(localStorage.getItem(AUTH_KEY)==='ok'){
+    loadServerData();
+    syncShopify(document.getElementById('sk-btn'));
+    syncShipHero(document.getElementById('sh-btn'));
+  }
+});
 
 
 var VELOCITY_PERIOD=30;
@@ -178,7 +187,7 @@ const ALL_TRACK=[...CORE_P,...GIFT_P];
 const PRICES=Object.fromEntries(ALL_PRODS.filter(p=>ALL_TRACK.includes(p.t)).map(p=>[p.t,p.p]));
 const BUNDLES=[{n:'Body Care Kit',sku:'BCKc&c',c:{'Body Wash':1,'Deodorant':1},p:90.26},{n:'Shower Essentials',sku:'SEC&C',c:{'Body Wash':1,'Deodorant':1,'Shampoo':1,'Conditioner':1},p:132.92},{n:'Hair Care Kit',sku:'HCKc&c',c:{'Shampoo':1,'Conditioner':1},p:67.66},{n:'Shower Trio Kit',sku:'STKc&c',c:{'Body Wash':1,'Shampoo':1,'Conditioner':1},p:86.77},{n:'Ball Package',sku:'BPc&c',c:{'Ball Deodorant':1,'Body Buffer':1},p:65.50}];
 const DEFAULT_SUPPLIERS=[{id:'s1',name:'Clean Co AU',contact:'James Wilson',email:'orders@cleanceau.com',phone:'+61 3 9000 1234',addr:'12 Supply St, Melbourne VIC 3000',country:'Australia',currency:'AUD',payTerms:'30% deposit, 70% on receipt',bankName:'ANZ Bank',bankAcct:'••••4521',notes:'Primary AU supplier.',terms:{deposit:30,port:0,receipt:70}},{id:'s2',name:'Fresh Supply US',contact:'Sarah Chen',email:'po@freshsupply.com',phone:'+1 310 555 0199',addr:'900 Warehouse Blvd, Los Angeles CA 90001',country:'USA',currency:'USD',payTerms:'30% deposit, 40% at port, 30% on receipt',bankName:'Chase Bank',bankAcct:'••••8832',notes:'Ships direct to Tidal Wave.',terms:{deposit:30,port:40,receipt:30}}];
-let SUPPLIERS=JSON.parse(localStorage.getItem('sf_suppliers')||'null')||DEFAULT_SUPPLIERS;
+let SUPPLIERS=[];
 let nSup=Math.max(3,SUPPLIERS.reduce((m,s)=>Math.max(m,parseInt(s.id.replace('s',''))||0),0)+1);
 // saveSuppliersLocal defined above
 const INV_FILES={};
@@ -202,7 +211,7 @@ async function loadServerData(){
     if(supRes.ok){
       const d=await supRes.json();
       // Always use server data (even if empty) — don't fall back to localStorage
-      SUPPLIERS=d.suppliers.length>0?d.suppliers.map(r=>r.data):DEFAULT_SUPPLIERS;
+      SUPPLIERS=d.suppliers.map(r=>r.data);
       nSup=Math.max(3,SUPPLIERS.reduce((m,s)=>Math.max(m,parseInt(s.id.replace('s',''))||0),0)+1);
     }
     SUPPLIERS_LOADED=true;
