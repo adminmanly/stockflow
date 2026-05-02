@@ -259,6 +259,7 @@ const od=po=>po.status!=='Received'&&po.exp&&new Date(po.exp)<new Date(TODAY);
 const fm=n=>Math.round(n).toLocaleString();
 const fmtD=n=>n?new Date(n).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}):'—';
 const dv=(fc,p)=>{const s=STOCK[fc]?.[p]??0,d=DAILY[fc]?.[p]??0;return s>0&&d>0?Math.floor(s/d):s===0?null:999};
+const dvWithPeriod=(fc,p,vel)=>{const s=STOCK[fc]?.[p]??0,d=vel[fc]?.[p]??0;return s>0&&d>0?Math.floor(s/d):s===0?null:999};
 const bdg=d=>d===null?'<span class="bdg bmu">—</span>':d<=7?`<span class="bdg bdn">${d}d critical</span>`:d<=14?`<span class="bdg bwn">${d}d low</span>`:d<=30?`<span class="bdg bwn">${d}d watch</span>`:`<span class="bdg bok">${d}d good</span>`;
 const cc=d=>d===null?'':d<=7?'cdn':d<=30?'cwn':'cok';
 const poTotal=po=>po.lines.reduce((s,l)=>s+l.o*(l.cost||0),0);
@@ -465,12 +466,12 @@ function deleteSup(sid){
 }
 function saveSup(sid){const acct=document.getElementById('sb-a').value;const masked=acct.length>4?'••••'+acct.slice(-4):acct||'';const data={name:document.getElementById('sn').value,contact:document.getElementById('sc').value,email:document.getElementById('se').value,phone:document.getElementById('sp').value,addr:document.getElementById('sa').value,country:document.getElementById('sco').value,currency:document.getElementById('scu').value,payTerms:document.getElementById('st-desc').value,bankName:document.getElementById('sb-b').value,bankAcct:masked,notes:document.getElementById('sno').value,terms:{deposit:+document.getElementById('st-d').value||0,port:+document.getElementById('st-p').value||0,receipt:+document.getElementById('st-r').value||0}};if(sid){const idx=SUPPLIERS.findIndex(s=>s.id===sid);SUPPLIERS[idx]={...SUPPLIERS[idx],...data};saveSuppliersLocal()}else{SUPPLIERS.push({id:'s'+nSup,...data});nSup++}saveSuppliersLocal();closeM();rSuppliers()}
 function rOverview(){
-  const ib=inbound();const tot=ALL_TRACK.reduce((s,p)=>s+FCS.reduce((a,f)=>a+(STOCK[f.id]?.[p]??0),0),0);const val=ALL_TRACK.reduce((s,p)=>s+FCS.reduce((a,f)=>a+(STOCK[f.id]?.[p]??0),0)*(PRICES[p]??0),0);const allD=FCS.flatMap(f=>ALL_TRACK.map(p=>dv(f.id,p))).filter(d=>d!==null);const avgD=allD.length?Math.round(allD.reduce((a,b)=>a+b,0)/allD.length):0;const totalOwed=POS.reduce((s,po)=>s+payOwed(po),0);const ovdP=overdueP();const vel=ALL_TRACK.map(p=>({p,dUS:DAILY.tw?.[p]??0,dAU:DAILY.vi?.[p]??0})).sort((a,b)=>(b.dUS+b.dAU)-(a.dUS+a.dAU));const alerts=FCS.flatMap(f=>ALL_TRACK.map(p=>({f,p,d:dv(f.id,p)}))).filter(a=>a.d!==null&&a.d<=30).sort((a,b)=>a.d-b.d);
+  const ib=inbound();const tot=ALL_TRACK.reduce((s,p)=>s+FCS.reduce((a,f)=>a+(STOCK[f.id]?.[p]??0),0),0);const val=ALL_TRACK.reduce((s,p)=>s+FCS.reduce((a,f)=>a+(STOCK[f.id]?.[p]??0),0)*(PRICES[p]??0),0);const allD=FCS.flatMap(f=>ALL_TRACK.map(p=>dvWithPeriod(f.id,p,velSrcOv))).filter(d=>d!==null);const avgD=allD.length?Math.round(allD.reduce((a,b)=>a+b,0)/allD.length):0;const totalOwed=POS.reduce((s,po)=>s+payOwed(po),0);const ovdP=overdueP();const vel=ALL_TRACK.map(p=>({p,dUS:DAILY.tw?.[p]??0,dAU:DAILY.vi?.[p]??0})).sort((a,b)=>(b.dUS+b.dAU)-(a.dUS+a.dAU));const hasInvD=Object.keys(INV_DAILY.tw).length>0||Object.keys(INV_DAILY.vi).length>0;const velSrcOv=hasInvD?INV_DAILY:DAILY;const alerts=FCS.flatMap(f=>ALL_TRACK.map(p=>({f,p,d:dvWithPeriod(f.id,p,velSrcOv)}))).filter(a=>a.d!==null&&a.d<=30).sort((a,b)=>a.d-b.d);
   document.getElementById('tab-overview').innerHTML=`
     <div class="g4"><div class="mc"><div class="ml">Total units</div><div class="mv">${fm(tot)}</div><div class="ms">All FCs · ${ALL_TRACK.length} products</div></div><div class="mc"><div class="ml">Est. stock value</div><div class="mv">$${fm(val)}</div></div><div class="mc"><div class="ml">Avg days coverage</div><div class="mv" style="${avgD<=14?'color:var(--red)':avgD<=30?'color:var(--warn)':''}">${avgD?avgD+'d':'—'}</div></div><div class="mc"><div class="ml">Payments owed</div><div class="mv" style="${totalOwed?'color:var(--warn)':''}">$${fm(totalOwed)}</div><div class="ms">${ovdP.length} overdue</div></div></div>
     <div class="g2">
       <div class="card"><div class="ct">Stock alerts ≤30d</div>${alerts.length?alerts.slice(0,7).map(a=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:0.5px solid var(--border)"><span style="font-size:13px;font-weight:600">${a.f.flag} ${a.f.name} — ${a.p}</span>${bdg(a.d)}</div>`).join(''):'<div class="sn">All products 30d+ covered or no stock data yet.</div>'}</div>
-      <div class="card"><div class="ct">Sales velocity <span class="bdg bmu">7d avg</span></div><table class="sf-t"><thead><tr><th>Product</th><th>Type</th><th style="text-align:right">🇺🇸 US/d</th><th style="text-align:right">🇦🇺 AU/d</th><th style="text-align:right">Total/d</th></tr></thead><tbody>${vel.map(v=>`<tr><td style="font-weight:600">${v.p}</td><td>${GIFT_P.includes(v.p)?'<span class="bdg bin">gift</span>':'<span class="bdg bmu">core</span>'}</td><td style="text-align:right">${v.dUS}/d</td><td style="text-align:right">${v.dAU}/d</td><td style="text-align:right;font-weight:600">${+(v.dUS+v.dAU).toFixed(1)}/d</td></tr>`).join('')}</tbody></table></div>
+      <div class="card"><div class="ct">Sales velocity <span class="bdg bmu">${VELOCITY_PERIOD}d avg</span></div><table class="sf-t"><thead><tr><th>Product</th><th>Type</th><th style="text-align:right">🇺🇸 US/d</th><th style="text-align:right">🇦🇺 AU/d</th><th style="text-align:right">Total/d</th></tr></thead><tbody>${vel.map(v=>`<tr><td style="font-weight:600">${v.p}</td><td>${GIFT_P.includes(v.p)?'<span class="bdg bin">gift</span>':'<span class="bdg bmu">core</span>'}</td><td style="text-align:right">${v.dUS}/d</td><td style="text-align:right">${v.dAU}/d</td><td style="text-align:right;font-weight:600">${+(v.dUS+v.dAU).toFixed(1)}/d</td></tr>`).join('')}</tbody></table></div>
     </div>
     ${ovdP.length?`<div class="card" style="border-color:var(--red)"><div class="ct">Overdue payments <span class="bdg bdn">${ovdP.length}</span></div>${ovdP.map(p=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border)"><div><div style="font-size:13px;font-weight:600">${p.po.id} — ${p.type}</div><div style="font-size:12px;color:var(--text2)">${sup(p.po.supId).name} · Due ${fmtD(p.dueDate)}</div></div><div style="text-align:right"><span class="bdg bdn">Overdue</span><div style="font-size:12px;font-weight:600;margin-top:2px">$${fm(p.amount)}</div></div></div>`).join('')}</div>`:''}`;
 }
@@ -516,7 +517,7 @@ async function syncInventoryVelocityCustom(from,to,days){
   // API fetches that many days back from today as approximation
   // For short windows (1-3d) this is most useful for spike detection
   try{
-    const r=await fetch('/api/live/shopify?days='+days+'&refresh=1');
+    const r=await fetch('/api/live/shopify?from='+from+'&to='+to+'&refresh=1');
     const d=await r.json();
     if(!r.ok||d.error)throw new Error(d.error);
     if(d.velocity_us){for(const[p,v]of Object.entries(d.velocity_us)){INV_DAILY.tw[p]=v}}
@@ -528,6 +529,7 @@ async function syncInventoryVelocityCustom(from,to,days){
 
 async function syncInventoryVelocity(days){
   INV_PERIOD=days;
+  invCustomMode=false;
   try{
     const r=await fetch('/api/live/shopify?days='+days);
     const d=await r.json();
@@ -582,20 +584,34 @@ function rBundles(){
 }
 function rForecast(){
   const gd=gapDays();const ib=inbound();
+  // Use INV_DAILY if set (from inventory period selector), else fall back to DAILY
+  const hasInvDaily=Object.keys(INV_DAILY.tw).length>0||Object.keys(INV_DAILY.vi).length>0;
+  const velSrc=hasInvDaily?INV_DAILY:DAILY;
+  const velPeriodLabel=INV_PERIOD+'d';
+  const dvF=(fc,p)=>dvWithPeriod(fc,p,velSrc);
   document.getElementById('tab-forecast').innerHTML=`
-    <div style="display:flex;align-items:flex-end;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-      <div><div class="fl" style="margin-bottom:4px">Gap to fill window</div><select class="sf-sel" id="gsel"><option value="30" ${gMode==='30'?'selected':''}>30 days</option><option value="60" ${gMode==='60'?'selected':''}>60 days</option><option value="90" ${gMode==='90'?'selected':''}>90 days</option><option value="120" ${gMode==='120'?'selected':''}>120 days</option><option value="custom" ${gMode==='custom'?'selected':''}>Custom…</option></select></div>
-      <div id="cdw" style="display:${gMode==='custom'?'flex':'none'};gap:8px;align-items:flex-end;flex-wrap:wrap"><div><div class="fl" style="margin-bottom:3px">From</div><input type="date" class="fi" id="gfrom" value="${csFrom}" style="width:140px"></div><div><div class="fl" style="margin-bottom:3px">To</div><input type="date" class="fi" id="gto" value="${csTo}" style="width:140px"></div></div>
-      <span class="bdg bmu">${gapLbl()}</span>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+      <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">
+        <div>
+          <div class="fl" style="margin-bottom:4px">Planning window <span class="bdg bmu" style="margin-left:4px">How many days of stock you want to cover</span></div>
+          <select class="sf-sel" id="gsel"><option value="30" ${gMode==='30'?'selected':''}>30 days</option><option value="60" ${gMode==='60'?'selected':''}>60 days</option><option value="90" ${gMode==='90'?'selected':''}>90 days</option><option value="120" ${gMode==='120'?'selected':''}>120 days</option><option value="custom" ${gMode==='custom'?'selected':''}>Custom…</option></select>
+        </div>
+        <div id="cdw" style="display:${gMode==='custom'?'flex':'none'};gap:8px;align-items:flex-end;flex-wrap:wrap"><div><div class="fl" style="margin-bottom:3px">From</div><input type="date" class="fi" id="gfrom" value="${csFrom}" style="width:140px"></div><div><div class="fl" style="margin-bottom:3px">To</div><input type="date" class="fi" id="gto" value="${csTo}" style="width:140px"></div></div>
+        <span class="bdg bmu">${gapLbl()}</span>
+      </div>
+      <div style="font-size:12px;color:var(--text2);background:var(--bg2);border-radius:var(--radius);padding:8px 12px;line-height:1.6">
+        <strong>Velocity basis: ${velPeriodLabel} avg</strong><br>
+        <span style="font-size:11px">Change in Inventory tab → Velocity period</span>
+      </div>
     </div>
     <div style="display:grid;grid-template-columns:150px repeat(2,1fr);gap:8px;margin-bottom:4px"><div></div>${FCS.map(f=>`<div style="font-size:11px;font-weight:700;color:var(--text2);text-align:center">${f.flag} ${f.name}</div>`).join('')}</div>
     <div style="font-size:11px;font-weight:700;color:var(--text2);padding:4px 0;margin-bottom:6px;border-top:0.5px solid var(--border);letter-spacing:.04em">CORE PRODUCTS</div>
-    ${CORE_P.map(p=>`<div style="display:grid;grid-template-columns:150px repeat(2,1fr);gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:13px;font-weight:600">${p}</div>${FCS.map(f=>{const d=dv(f.id,p);return`<div class="fc-cell ${d===null?'':cc(d)}"><div class="fc-days">${d===null?'—':d}</div><div class="fc-lbl">days</div></div>`}).join('')}</div>`).join('')}
+    ${CORE_P.map(p=>`<div style="display:grid;grid-template-columns:150px repeat(2,1fr);gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:13px;font-weight:600">${p}</div>${FCS.map(f=>{const d=dvF(f.id,p);return`<div class="fc-cell ${d===null?'':cc(d)}"><div class="fc-days">${d===null?'—':d}</div><div class="fc-lbl">days</div></div>`}).join('')}</div>`).join('')}
     <div style="font-size:11px;font-weight:700;color:var(--text2);padding:4px 0;margin:6px 0;border-top:0.5px dashed var(--border2);letter-spacing:.04em">FREE GIFTS / ADD-ONS</div>
-    ${GIFT_P.map(p=>`<div style="display:grid;grid-template-columns:150px repeat(2,1fr);gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:13px;font-weight:600">${p}</div>${FCS.map(f=>{const d=dv(f.id,p);return`<div class="fc-cell ${d===null?'':cc(d)}"><div class="fc-days">${d===null?'—':d}</div><div class="fc-lbl">days</div></div>`}).join('')}</div>`).join('')}
-    <div class="card" style="margin-top:16px"><div class="ct">Gap to fill — ${gapLbl()}</div>
+    ${GIFT_P.map(p=>`<div style="display:grid;grid-template-columns:150px repeat(2,1fr);gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:13px;font-weight:600">${p}</div>${FCS.map(f=>{const d=dvF(f.id,p);return`<div class="fc-cell ${d===null?'':cc(d)}"><div class="fc-days">${d===null?'—':d}</div><div class="fc-lbl">days</div></div>`}).join('')}</div>`).join('')}
+    <div class="card" style="margin-top:16px"><div class="ct">Gap to fill — ${gapLbl()} <span class="bdg bmu">at ${velPeriodLabel} velocity · units needed to cover next ${gapLbl()} of sales</span></div>
       <table class="sf-t"><thead><tr><th>FC</th><th>Product</th><th>Type</th><th style="text-align:right">Days left</th><th style="text-align:right">Need</th><th style="text-align:right">Stock</th><th style="text-align:right">Inbound</th><th style="text-align:right">Gap</th></tr></thead><tbody>
-      ${FCS.flatMap(f=>ALL_TRACK.map(p=>{const d=dv(f.id,p),dl=DAILY[f.id]?.[p]??0,need=Math.ceil(dl*gd),cur=STOCK[f.id]?.[p]??0,inb=ib[f.id]?.[p]??0,gap=Math.max(0,need-cur-inb);return{f,p,d,need,cur,inb,gap,gift:GIFT_P.includes(p)}})).filter(r=>r.dl!==0||r.cur>0).sort((a,b)=>(a.d||999)-(b.d||999)).map(r=>`<tr><td>${r.f.flag} ${r.f.name}</td><td style="font-weight:600">${r.p}</td><td><span class="bdg ${r.gift?'bin':'bmu'}">${r.gift?'gift':'core'}</span></td><td style="text-align:right">${bdg(r.d)}</td><td style="text-align:right">${r.need||'—'}</td><td style="text-align:right">${r.cur}</td><td style="text-align:right;color:var(--blue)">${r.inb?'+'+fm(r.inb):'—'}</td><td style="text-align:right;font-weight:600;${r.gap?'color:var(--red)':''}">${r.gap?'+'+fm(r.gap):'✓'}</td></tr>`).join('')}
+      ${FCS.flatMap(f=>ALL_TRACK.map(p=>{const d=dvF(f.id,p),dl=velSrc[f.id]?.[p]??0,need=Math.ceil(dl*gd),cur=STOCK[f.id]?.[p]??0,inb=ib[f.id]?.[p]??0,gap=Math.max(0,need-cur-inb);return{f,p,d,need,cur,inb,gap,gift:GIFT_P.includes(p)}})).filter(r=>r.dl!==0||r.cur>0).sort((a,b)=>(a.d||999)-(b.d||999)).map(r=>`<tr><td>${r.f.flag} ${r.f.name}</td><td style="font-weight:600">${r.p}</td><td><span class="bdg ${r.gift?'bin':'bmu'}">${r.gift?'gift':'core'}</span></td><td style="text-align:right">${bdg(r.d)}</td><td style="text-align:right">${r.need||'—'}</td><td style="text-align:right">${r.cur}</td><td style="text-align:right;color:var(--blue)">${r.inb?'+'+fm(r.inb):'—'}</td><td style="text-align:right;font-weight:600;${r.gap?'color:var(--red)':''}">${r.gap?'+'+fm(r.gap):'✓'}</td></tr>`).join('')}
       </tbody></table></div>`;
   document.getElementById('gsel').addEventListener('change',e=>{gMode=e.target.value;document.getElementById('cdw').style.display=gMode==='custom'?'flex':'none';rForecast()});
   const gf=document.getElementById('gfrom'),gt=document.getElementById('gto');
