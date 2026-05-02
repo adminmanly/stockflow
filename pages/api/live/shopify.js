@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     const to = new Date(req.query.to)
     to.setHours(23, 59, 59, 999) // include full end day
     sinceDate = from
-    validDays = Math.max(1, Math.round((to - from) / 864e5) + 1) // +1 to include end date
+    validDays = Math.max(1, Math.round((to - from) / 864e5)) // days in range (same-day = 1)
     cacheKey = `shopify_${req.query.from}_${req.query.to}`
   } else {
     const days = parseInt(req.query?.days) || 30
