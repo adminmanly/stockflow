@@ -15,7 +15,7 @@ export default async function handler(req, res) {
   }
 
   const days = parseInt(req.query?.days) || 30
-  const validDays = [7, 14, 30].includes(days) ? days : 30
+  const validDays = (days >= 1 && days <= 90) ? days : 30
   const forceRefresh = req.query?.refresh === '1'
   const cacheKey = `shopify_${validDays}`
 
