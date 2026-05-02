@@ -167,7 +167,9 @@ window.addEventListener('load', () => {
 
 
 var VELOCITY_PERIOD=30;
+var INV_PERIOD=30;
 var DAILY_REV=0;
+const INV_DAILY={tw:{},vi:{}}; // inventory-specific velocity (separate from reorder)
 var DAILY_ORDERS=0;
 var UNITS_SOLD_DATA={};
 const FCS=[{id:'tw',name:'Tidal Wave',flag:'🇺🇸',loc:'United States'},{id:'vi',name:'Internal WH',flag:'🇦🇺',loc:'Victoria, AU'}];
@@ -295,8 +297,8 @@ async function syncShopify(btn){
     const d=await r.json();
     if(!r.ok||d.error)throw new Error(d.error||'Shopify error');
     if(d.au_stock){for(const[product,qty]of Object.entries(d.au_stock)){STOCK.vi[product]=qty}}
-    if(d.velocity_us){if(!DAILY.tw)DAILY.tw={};for(const[product,vel]of Object.entries(d.velocity_us)){DAILY.tw[product]=vel}}
-    if(d.velocity_au){if(!DAILY.vi)DAILY.vi={};for(const[product,vel]of Object.entries(d.velocity_au)){DAILY.vi[product]=vel}}
+    if(d.velocity_us){if(!DAILY.tw)DAILY.tw={};for(const[product,vel]of Object.entries(d.velocity_us)){DAILY.tw[product]=vel;INV_DAILY.tw[product]=vel}}
+    if(d.velocity_au){if(!DAILY.vi)DAILY.vi={};for(const[product,vel]of Object.entries(d.velocity_au)){DAILY.vi[product]=vel;INV_DAILY.vi[product]=vel}}
     if(d.avg_price){for(const[product,price]of Object.entries(d.avg_price)){AVG_PRICE[product]=price}}
     if(d.cogs){for(const[product,cost]of Object.entries(d.cogs)){COGS[product]=cost}}
     if(d.units_sold){for(const[product,qty]of Object.entries(d.units_sold)){UNITS_SOLD_DATA[product]=qty}}
@@ -472,17 +474,103 @@ function rOverview(){
     </div>
     ${ovdP.length?`<div class="card" style="border-color:var(--red)"><div class="ct">Overdue payments <span class="bdg bdn">${ovdP.length}</span></div>${ovdP.map(p=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border)"><div><div style="font-size:13px;font-weight:600">${p.po.id} — ${p.type}</div><div style="font-size:12px;color:var(--text2)">${sup(p.po.supId).name} · Due ${fmtD(p.dueDate)}</div></div><div style="text-align:right"><span class="bdg bdn">Overdue</span><div style="font-size:12px;font-weight:600;margin-top:2px">$${fm(p.amount)}</div></div></div>`).join('')}</div>`:''}`;
 }
+
+var invCustomMode = false;
+var invCustomFrom = '';
+var invCustomTo = '';
+
+function setInvPeriod(days){
+  invCustomMode = false;
+  INV_PERIOD = days;
+  syncInventoryVelocity(days);
+}
+
+function toggleInvCustom(){
+  invCustomMode = !invCustomMode;
+  if(!invCustomTo) invCustomTo = new Date().toISOString().split('T')[0];
+  if(!invCustomFrom){
+    const d = new Date(); d.setDate(d.getDate()-14);
+    invCustomFrom = d.toISOString().split('T')[0];
+  }
+  rInventory();
+  // Wire up date inputs after render
+  setTimeout(()=>{
+    const f=document.getElementById('inv-from'),t=document.getElementById('inv-to');
+    if(f)f.addEventListener('change',e=>{invCustomFrom=e.target.value});
+    if(t)t.addEventListener('change',e=>{invCustomTo=e.target.value});
+  },50);
+}
+
+function applyInvCustom(){
+  const f=document.getElementById('inv-from'),t=document.getElementById('inv-to');
+  if(f)invCustomFrom=f.value;
+  if(t)invCustomTo=t.value;
+  if(!invCustomFrom||!invCustomTo){alert('Please select both dates');return;}
+  const ms=new Date(invCustomTo)-new Date(invCustomFrom);
+  const days=Math.max(1,Math.round(ms/864e5));
+  INV_PERIOD=days;
+  syncInventoryVelocityCustom(invCustomFrom,invCustomTo,days);
+}
+
+async function syncInventoryVelocityCustom(from,to,days){
+  // Fetch using the number of days (API uses days back from today)
+  // We pass days as approximation; future enhancement could use exact dates
+  try{
+    const r=await fetch('/api/live/shopify?days='+days);
+    const d=await r.json();
+    if(!r.ok||d.error)throw new Error(d.error);
+    if(d.velocity_us){for(const[p,v]of Object.entries(d.velocity_us)){INV_DAILY.tw[p]=v}}
+    if(d.velocity_au){for(const[p,v]of Object.entries(d.velocity_au)){INV_DAILY.vi[p]=v}}
+    if(d.au_stock){for(const[p,q]of Object.entries(d.au_stock)){STOCK.vi[p]=q}}
+  }catch(e){console.error('[InvVelocity]',e.message);}
+  rInventory();
+}
+
+async function syncInventoryVelocity(days){
+  INV_PERIOD=days;
+  try{
+    const r=await fetch('/api/live/shopify?days='+days);
+    const d=await r.json();
+    if(!r.ok||d.error)throw new Error(d.error);
+    if(d.velocity_us){for(const[p,v]of Object.entries(d.velocity_us)){INV_DAILY.tw[p]=v}}
+    if(d.velocity_au){for(const[p,v]of Object.entries(d.velocity_au)){INV_DAILY.vi[p]=v}}
+    // Also update AU stock if fresher
+    if(d.au_stock){for(const[p,q]of Object.entries(d.au_stock)){STOCK.vi[p]=q}}
+  }catch(e){console.error('[InvVelocity]',e.message);}
+  rInventory();
+}
+
 function rInventory(){
   const ib=inbound();const fc=FCS.find(f=>f.id===aFC);
   const isLive=aFC==='tw'?shConnected:skConnected;
+  // Use INV_DAILY if populated, else fall back to DAILY
+  const hasInvDaily=Object.keys(INV_DAILY.tw).length>0||Object.keys(INV_DAILY.vi).length>0;
+  const velSrc=hasInvDaily?INV_DAILY:DAILY;
+  const dvInv=(fc,p)=>{const s=STOCK[fc]?.[p]??0,d=velSrc[fc]?.[p]??0;return s>0&&d>0?Math.floor(s/d):s===0?null:999};
   document.getElementById('tab-inventory').innerHTML=`
-    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap" id="fctabs">${FCS.map(f=>`<button class="fct${f.id===aFC?' active':''}" data-f="${f.id}">${f.flag} ${f.name}</button>`).join('')}</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap" id="fctabs">${FCS.map(f=>`<button class="fct${f.id===aFC?' active':''}" data-f="${f.id}">${f.flag} ${f.name}</button>`).join('')}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--text2)">Velocity period:</span>
+        <div style="display:flex;gap:4px;align-items:center">
+          ${[7,14,30].map(d=>`<button class="fct${INV_PERIOD===d&&!invCustomMode?' active':''}" onclick="setInvPeriod(${d})" style="padding:4px 10px;font-size:11px">${d}d</button>`).join('')}
+          <button class="fct${invCustomMode?' active':''}" onclick="toggleInvCustom()" style="padding:4px 10px;font-size:11px">Custom…</button>
+        </div>
+        ${invCustomMode?`<div style="display:flex;align-items:center;gap:6px">
+          <input type="date" id="inv-from" value="${invCustomFrom}" max="${invCustomTo||new Date().toISOString().split('T')[0]}" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg1);color:var(--text1)">
+          <span style="font-size:11px;color:var(--text2)">→</span>
+          <input type="date" id="inv-to" value="${invCustomTo}" max="${new Date().toISOString().split('T')[0]}" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg1);color:var(--text1)">
+          <button class="btn btp" style="font-size:11px;padding:3px 10px" onclick="applyInvCustom()">Apply</button>
+        </div>`:''}
+        <span style="font-size:11px;color:var(--text3)">${invCustomMode&&invCustomFrom&&invCustomTo?invCustomFrom+' → '+invCustomTo:INV_PERIOD+'d avg'}</span>
+      </div>
+    </div>
     ${!isLive?`<div style="background:var(--warnbg);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--warn)">⚠ ${aFC==='tw'?'ShipHero not connected — Tidal Wave showing no data.':'Shopify not connected — Internal WH showing no data.'}</div>`:''}
     <div class="card"><div class="ct">${fc.flag} ${fc.name} — ${fc.loc}<span class="bdg ${isLive?'bok':'bmu'}">${isLive?(aFC==='tw'?'ShipHero live':'Shopify live'):'not connected'}</span></div>
     <table class="sf-t"><thead><tr><th>Product</th><th>Type</th><th style="text-align:right">In stock</th><th style="text-align:right">Inbound (POs)</th><th style="text-align:right">Total avail.</th><th style="text-align:right">Daily</th><th style="text-align:right">Days left</th><th style="text-align:right">Status</th></tr></thead><tbody>
-    ${CORE_P.map(p=>{const s=STOCK[aFC]?.[p]??0,b=ib[aFC]?.[p]??0,dl=DAILY[aFC]?.[p]??0,d=dv(aFC,p);return`<tr><td style="font-weight:600">${p}</td><td><span class="bdg bmu">core</span></td><td style="text-align:right">${fm(s)}</td><td style="text-align:right;color:var(--blue)">${b?'+'+fm(b):'—'}</td><td style="text-align:right;font-weight:600">${fm(s+b)}</td><td style="text-align:right">${dl?dl+'/d':'—'}</td><td style="text-align:right;font-weight:600">${d===null?'—':d+'d'}</td><td style="text-align:right">${bdg(d)}</td></tr>`}).join('')}
+    ${CORE_P.map(p=>{const s=STOCK[aFC]?.[p]??0,b=ib[aFC]?.[p]??0,dl=velSrc[aFC]?.[p]??0,d=dvInv(aFC,p);return`<tr><td style="font-weight:600">${p}</td><td><span class="bdg bmu">core</span></td><td style="text-align:right">${fm(s)}</td><td style="text-align:right;color:var(--blue)">${b?'+'+fm(b):'—'}</td><td style="text-align:right;font-weight:600">${fm(s+b)}</td><td style="text-align:right">${dl?dl+'/d':'—'}</td><td style="text-align:right;font-weight:600">${d===null?'—':d+'d'}</td><td style="text-align:right">${bdg(d)}</td></tr>`}).join('')}
     <tr><td colspan="8" style="font-size:11px;font-weight:700;color:var(--text2);background:var(--bg2);padding:4px 8px;letter-spacing:.04em">FREE GIFTS / ADD-ONS</td></tr>
-    ${GIFT_P.map(p=>{const s=STOCK[aFC]?.[p]??0,b=ib[aFC]?.[p]??0,dl=DAILY[aFC]?.[p]??0,d=dv(aFC,p);return`<tr><td style="font-weight:600">${p}</td><td><span class="bdg bin">gift</span></td><td style="text-align:right">${fm(s)}</td><td style="text-align:right;color:var(--blue)">${b?'+'+fm(b):'—'}</td><td style="text-align:right;font-weight:600">${fm(s+b)}</td><td style="text-align:right">${dl?dl+'/d':'—'}</td><td style="text-align:right;font-weight:600">${d===null?'—':d+'d'}</td><td style="text-align:right">${bdg(d)}</td></tr>`}).join('')}
+    ${GIFT_P.map(p=>{const s=STOCK[aFC]?.[p]??0,b=ib[aFC]?.[p]??0,dl=velSrc[aFC]?.[p]??0,d=dvInv(aFC,p);return`<tr><td style="font-weight:600">${p}</td><td><span class="bdg bin">gift</span></td><td style="text-align:right">${fm(s)}</td><td style="text-align:right;color:var(--blue)">${b?'+'+fm(b):'—'}</td><td style="text-align:right;font-weight:600">${fm(s+b)}</td><td style="text-align:right">${dl?dl+'/d':'—'}</td><td style="text-align:right;font-weight:600">${d===null?'—':d+'d'}</td><td style="text-align:right">${bdg(d)}</td></tr>`}).join('')}
     </tbody></table></div>`;
   document.querySelectorAll('#fctabs .fct').forEach(b=>b.addEventListener('click',()=>{aFC=b.dataset.f;rInventory()}));
 }
