@@ -493,23 +493,22 @@ function toggleInvCustom(){
     invCustomFrom = d.toISOString().split('T')[0];
   }
   rInventory();
-  // Wire up date inputs after render
-  setTimeout(()=>{
-    const f=document.getElementById('inv-from'),t=document.getElementById('inv-to');
-    if(f)f.addEventListener('change',e=>{invCustomFrom=e.target.value});
-    if(t)t.addEventListener('change',e=>{invCustomTo=e.target.value});
-  },50);
+  // No need to wire listeners — applyInvCustom reads DOM directly on click
 }
 
 function applyInvCustom(){
-  const f=document.getElementById('inv-from'),t=document.getElementById('inv-to');
-  if(f)invCustomFrom=f.value;
-  if(t)invCustomTo=t.value;
-  if(!invCustomFrom||!invCustomTo){alert('Please select both dates');return;}
-  const ms=new Date(invCustomTo)-new Date(invCustomFrom);
+  // Read directly from DOM at time of click
+  const f=document.getElementById('inv-from');
+  const t=document.getElementById('inv-to');
+  const from=f?f.value:invCustomFrom;
+  const to=t?t.value:invCustomTo;
+  if(!from||!to){alert('Please select both From and To dates');return;}
+  invCustomFrom=from;
+  invCustomTo=to;
+  const ms=new Date(to)-new Date(from);
   const days=Math.max(1,Math.round(ms/864e5));
   INV_PERIOD=days;
-  syncInventoryVelocityCustom(invCustomFrom,invCustomTo,days);
+  syncInventoryVelocityCustom(from,to,days);
 }
 
 async function syncInventoryVelocityCustom(from,to,days){
@@ -557,9 +556,9 @@ function rInventory(){
           <button class="fct${invCustomMode?' active':''}" onclick="toggleInvCustom()" style="padding:4px 10px;font-size:11px">Custom…</button>
         </div>
         ${invCustomMode?`<div style="display:flex;align-items:center;gap:6px">
-          <input type="date" id="inv-from" value="${invCustomFrom}" max="${invCustomTo||new Date().toISOString().split('T')[0]}" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg1);color:var(--text1)">
+          <input type="date" id="inv-from" value="${invCustomFrom}" max="${new Date().toISOString().split('T')[0]}" onchange="invCustomFrom=this.value" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg1);color:var(--text1)">
           <span style="font-size:11px;color:var(--text2)">→</span>
-          <input type="date" id="inv-to" value="${invCustomTo}" max="${new Date().toISOString().split('T')[0]}" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg1);color:var(--text1)">
+          <input type="date" id="inv-to" value="${invCustomTo}" max="${new Date().toISOString().split('T')[0]}" onchange="invCustomTo=this.value" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg1);color:var(--text1)">
           <button class="btn btp" style="font-size:11px;padding:3px 10px" onclick="applyInvCustom()">Apply</button>
         </div>`:''}
         <span style="font-size:11px;color:var(--text3)">${invCustomMode&&invCustomFrom&&invCustomTo?invCustomFrom+' → '+invCustomTo:INV_PERIOD+'d avg'}</span>
