@@ -1,7 +1,6 @@
-// Simple in-memory cache (resets on cold start, persists between warm requests)
 let _cache = null;
 let _cacheTime = 0;
-const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+const CACHE_TTL = 60 * 60 * 1000;
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).end()
@@ -14,18 +13,33 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Shopify not configured' })
   }
 
-  const days = parseInt(req.query?.days) || 30
-  const validDays = (days >= 1 && days <= 90) ? days : 30
-  const forceRefresh = req.query?.refresh === '1'
-  const cacheKey = `shopify_${validDays}`
+  const BASE = `https://${domain}/admin/api/2024-04`
+  const HEADERS = { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' }
 
-  // Return cached response if fresh
+  // Support ?days=N (days back from today) OR ?from=YYYY-MM-DD&to=YYYY-MM-DD (exact range)
+  const forceRefresh = req.query?.refresh === '1'
+  let sinceDate, validDays, cacheKey
+
+  if (req.query?.from && req.query?.to) {
+    // Exact date range mode
+    const from = new Date(req.query.from)
+    const to = new Date(req.query.to)
+    to.setHours(23, 59, 59, 999) // include full end day
+    sinceDate = from
+    validDays = Math.max(1, Math.round((to - from) / 864e5) + 1) // +1 to include end date
+    cacheKey = `shopify_${req.query.from}_${req.query.to}`
+  } else {
+    const days = parseInt(req.query?.days) || 30
+    validDays = (days >= 1 && days <= 90) ? days : 30
+    sinceDate = new Date()
+    sinceDate.setDate(sinceDate.getDate() - validDays)
+    cacheKey = `shopify_${validDays}`
+  }
+
+  // Return cached if fresh and not forcing refresh
   if (!forceRefresh && _cache?.key === cacheKey && Date.now() - _cacheTime < CACHE_TTL) {
     return res.json({ ..._cache.data, cached: true })
   }
-
-  const BASE = `https://${domain}/admin/api/2024-04`
-  const HEADERS = { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' }
 
   const SKU_MAP = {
     'BWc&c-MANLY': 'Body Wash',
@@ -55,14 +69,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    const sinceDate = new Date()
-    sinceDate.setDate(sinceDate.getDate() - validDays)
-
-    // Step 1: products, locations, first orders page — all parallel
     const [prodRes, locRes, firstOrdersRes] = await Promise.all([
       fetch(`${BASE}/products.json?limit=250`, { headers: HEADERS }),
       fetch(`${BASE}/locations.json`, { headers: HEADERS }),
-      fetch(`${BASE}/orders.json?status=any&financial_status=paid&created_at_min=${sinceDate.toISOString()}&limit=250&fields=id,total_price,line_items,shipping_address`, { headers: HEADERS })
+      fetch(
+        `${BASE}/orders.json?status=any&financial_status=paid&created_at_min=${sinceDate.toISOString()}${req.query?.to ? '&created_at_max=' + new Date(req.query.to + 'T23:59:59.999Z').toISOString() : ''}&limit=250&fields=id,total_price,line_items,shipping_address`,
+        { headers: HEADERS }
+      )
     ])
 
     if (!prodRes.ok) throw new Error(`products ${prodRes.status}`)
@@ -85,7 +98,6 @@ export default async function handler(req, res) {
     const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
     const trackedItemIds = Object.keys(SKU_MAP).map(s => skuToItemId[s]).filter(Boolean)
 
-    // Step 2: COGS + AU stock in parallel
     const [cogsRes, invRes] = await Promise.all([
       trackedItemIds.length > 0
         ? fetch(`${BASE}/inventory_items.json?ids=${trackedItemIds.join(',')}&limit=250`, { headers: HEADERS })
@@ -115,20 +127,24 @@ export default async function handler(req, res) {
       }
     }
 
-    // Step 3: paginate orders — run pages in batches of 3 simultaneously
     const soldBySkuUS = {}
     const soldBySkuAU = {}
     const revBySku = {}
     let totalRevenue = 0
     let totalOrders = 0
+    let pageCount = 0
+    let currentRes = firstOrdersRes
 
-    // Process first page
-    const processOrders = (ordersData) => {
+    while (currentRes && pageCount < 50) {
+      if (!currentRes.ok) break
+      const ordersData = await currentRes.json()
+      totalOrders += (ordersData.orders || []).length
+      pageCount++
+
       for (const order of ordersData.orders || []) {
         const country = order.shipping_address?.country_code || 'US'
         const isAU = country === 'AU'
         totalRevenue += parseFloat(order.total_price || 0)
-        totalOrders++
 
         for (const item of order.line_items) {
           const price = parseFloat(item.price || 0)
@@ -156,46 +172,12 @@ export default async function handler(req, res) {
           }
         }
       }
+
+      const linkHeader = currentRes.headers.get('Link') || ''
+      const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/)
+      currentRes = nextMatch ? await fetch(nextMatch[1], { headers: HEADERS }) : null
     }
 
-    if (!firstOrdersRes.ok) throw new Error('Orders fetch failed')
-    const firstData = await firstOrdersRes.json()
-    processOrders(firstData)
-
-    // Collect all next-page URLs and fetch in batches of 3
-    let nextUrl = null
-    const getLinkNext = (res) => {
-      const link = res.headers.get('Link') || ''
-      const m = link.match(/<([^>]+)>;\s*rel="next"/)
-      return m ? m[1] : null
-    }
-
-    nextUrl = getLinkNext(firstOrdersRes)
-    let pageCount = 1
-
-    while (nextUrl && pageCount < 50) {
-      // Fetch up to 3 pages at once
-      const batch = []
-      const batchUrls = []
-      for (let i = 0; i < 3 && nextUrl; i++) {
-        batchUrls.push(nextUrl)
-        batch.push(fetch(nextUrl, { headers: HEADERS }))
-        // We don't know the next URL until we get this response, so just do 1 at a time
-        // unless we could pre-compute them (we can't with cursor pagination)
-        break
-      }
-
-      const responses = await Promise.all(batch)
-      for (const r of responses) {
-        if (!r.ok) break
-        const d = await r.json()
-        processOrders(d)
-        nextUrl = getLinkNext(r)
-        pageCount++
-      }
-    }
-
-    // Build response
     const auStockByProduct = {}
     const velocityUSByProduct = {}
     const velocityAUByProduct = {}
@@ -228,7 +210,6 @@ export default async function handler(req, res) {
       cached_at: new Date().toISOString(),
     }
 
-    // Cache the result
     _cache = { key: cacheKey, data: result }
     _cacheTime = Date.now()
 
