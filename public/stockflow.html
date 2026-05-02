@@ -512,10 +512,11 @@ function applyInvCustom(){
 }
 
 async function syncInventoryVelocityCustom(from,to,days){
-  // Fetch using the number of days (API uses days back from today)
-  // We pass days as approximation; future enhancement could use exact dates
+  // days = number of days between from and to dates
+  // API fetches that many days back from today as approximation
+  // For short windows (1-3d) this is most useful for spike detection
   try{
-    const r=await fetch('/api/live/shopify?days='+days);
+    const r=await fetch('/api/live/shopify?days='+days+'&refresh=1');
     const d=await r.json();
     if(!r.ok||d.error)throw new Error(d.error);
     if(d.velocity_us){for(const[p,v]of Object.entries(d.velocity_us)){INV_DAILY.tw[p]=v}}
@@ -561,7 +562,7 @@ function rInventory(){
           <input type="date" id="inv-to" value="${invCustomTo}" max="${new Date().toISOString().split('T')[0]}" onchange="invCustomTo=this.value" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg1);color:var(--text1)">
           <button class="btn btp" style="font-size:11px;padding:3px 10px" onclick="applyInvCustom()">Apply</button>
         </div>`:''}
-        <span style="font-size:11px;color:var(--text3)">${invCustomMode&&invCustomFrom&&invCustomTo?invCustomFrom+' → '+invCustomTo:INV_PERIOD+'d avg'}</span>
+        <span style="font-size:11px;color:var(--text3)">${invCustomMode&&invCustomFrom&&invCustomTo?invCustomFrom+' → '+invCustomTo+' ('+INV_PERIOD+'d)':INV_PERIOD+'d avg'}</span>
       </div>
     </div>
     ${!isLive?`<div style="background:var(--warnbg);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--warn)">⚠ ${aFC==='tw'?'ShipHero not connected — Tidal Wave showing no data.':'Shopify not connected — Internal WH showing no data.'}</div>`:''}
