@@ -1,241 +1,1283 @@
-// Simple in-memory cache (resets on cold start, persists between warm requests)
-let _cache = null;
-let _cacheTime = 0;
-const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stockflow</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8f7f4;color:#1a1a1a;font-size:14px}
+:root{--bg1:#fff;--bg2:#f4f3f0;--border:#e5e4e0;--border2:#d0cfc9;--text1:#1a1a1a;--text2:#666;--text3:#999;--blue:#185fa5;--bluebg:#e6f1fb;--green:#0c6849;--greenbg:#d1ecb8;--warn:#7a4808;--warnbg:#fae0a8;--red:#a32d2d;--redbg:#fcebeb;--radius:8px;--radius-lg:12px}
+.sfh{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:0.5px solid var(--border);background:var(--bg1);flex-wrap:wrap;gap:8px;position:sticky;top:0;z-index:10}
+.sfb{font-size:15px;font-weight:600}
+.wrap{max-width:1300px;margin:0 auto;padding:20px}
+.tnav{display:flex;border-bottom:0.5px solid var(--border);margin-bottom:18px;overflow-x:auto;background:var(--bg1);padding:0 20px;position:sticky;top:49px;z-index:9}
+.tb{background:none;border:none;border-bottom:2px solid transparent;padding:10px 12px;font-size:12px;color:var(--text2);cursor:pointer;white-space:nowrap;font-family:inherit;margin-bottom:-0.5px;font-weight:500}
+.tb:hover{color:var(--text1)}.tb.active{border-bottom-color:var(--text1);color:var(--text1);font-weight:600}
+.g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px}
+.mc{background:var(--bg2);border-radius:var(--radius);padding:14px}
+.ml{font-size:12px;color:var(--text2);margin-bottom:4px}
+.mv{font-size:22px;font-weight:600;line-height:1.2}
+.ms{font-size:11px;color:var(--text3);margin-top:2px}
+.card{background:var(--bg1);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px}
+.ct{font-size:13px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.sf-t{width:100%;border-collapse:collapse;font-size:13px}
+.sf-t th{text-align:left;font-weight:600;font-size:11px;color:var(--text2);padding:4px 8px 8px;border-bottom:0.5px solid var(--border);white-space:nowrap}
+.sf-t td{padding:8px;border-bottom:0.5px solid var(--border);vertical-align:middle}
+.sf-t tr:last-child td{border-bottom:none}
+.sf-t tr:hover td{background:var(--bg2)}
+.bdg{display:inline-flex;align-items:center;font-size:11px;padding:2px 7px;border-radius:99px;font-weight:600;white-space:nowrap}
+.bok{background:var(--greenbg);color:var(--green)}.bwn{background:var(--warnbg);color:var(--warn)}.bdn{background:var(--redbg);color:var(--red)}.bin{background:var(--bluebg);color:var(--blue)}.bmu{background:var(--bg2);color:var(--text2);border:0.5px solid var(--border2)}
+.btn{font-size:12px;padding:5px 12px;border:0.5px solid var(--border2);border-radius:99px;background:none;cursor:pointer;color:var(--text1);font-family:inherit;font-weight:500}
+.btn:hover{background:var(--bg2)}
+.btp{background:var(--text1)!important;color:var(--bg1)!important;border-color:var(--text1)!important}.btp:hover{opacity:.85}
+.btd{font-size:11px;padding:3px 8px;border:0.5px solid var(--red);border-radius:99px;background:none;cursor:pointer;color:var(--red);font-family:inherit}
+.btd:hover{background:var(--redbg)}.bts{font-size:11px;padding:3px 8px}
+.sf-sel{font-size:13px;padding:5px 9px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg1);color:var(--text1);font-family:inherit}
+.fi{width:100%;font-size:12px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg1);color:var(--text1);font-family:inherit}
+.fbar{background:var(--bg2);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+.fg{display:flex;flex-direction:column;gap:3px;min-width:90px;flex:1}
+.fl{font-size:11px;color:var(--text2);font-weight:600}
+.fct{padding:5px 12px;border:0.5px solid var(--border2);border-radius:99px;font-size:12px;cursor:pointer;background:none;color:var(--text2);font-family:inherit}
+.fct.active{background:var(--bg2);color:var(--text1);border-color:var(--border);font-weight:600}
+.fc-cell{border-radius:var(--radius);padding:10px 8px;text-align:center}
+.fc-days{font-size:18px;font-weight:600}.fc-lbl{font-size:10px;color:var(--text2);margin-top:1px}
+.cok{background:var(--greenbg)}.cok .fc-days{color:var(--green)}.cwn{background:var(--warnbg)}.cwn .fc-days{color:var(--warn)}.cdn{background:var(--redbg)}.cdn .fc-days{color:var(--red)}
+.form-in{width:100%;font-size:13px;padding:7px 10px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg1);color:var(--text1);font-family:inherit;outline:none}
+.form-in:focus{border-color:var(--blue)}
+.form-sel{width:100%;font-size:13px;padding:7px 10px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg1);color:var(--text1);font-family:inherit}
+.form-lbl{font-size:11px;font-weight:600;color:var(--text2);margin-bottom:4px}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.frow3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px}
+.frow1{margin-bottom:12px}
+.moverlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;overflow-y:auto;padding:30px 12px}
+.mbox{background:var(--bg1);border:0.5px solid var(--border);border-radius:var(--radius-lg);max-width:680px;margin:0 auto;padding:22px}
+.mbox-sm{background:var(--bg1);border:0.5px solid var(--border);border-radius:var(--radius-lg);max-width:420px;margin:80px auto;padding:24px}
+.mbox h3{font-size:14px;font-weight:600;margin:0 0 16px}
+.spill{cursor:pointer;padding:3px 9px;border-radius:99px;font-size:11px;font-weight:600;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;user-select:none;position:relative}
+.sdrop{position:absolute;top:calc(100% + 4px);left:0;z-index:300;background:var(--bg1);border:0.5px solid var(--border2);border-radius:var(--radius-lg);min-width:155px;padding:4px;box-shadow:0 4px 16px rgba(0,0,0,.12);display:none}
+.sopt{padding:7px 11px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;margin:1px 0}.sopt:hover{opacity:.82}
+.prog-w{height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:4px;width:80px}
+.prog-b{height:3px;border-radius:2px;background:var(--blue)}
+.sn{font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.5}
+.ov{color:var(--red);font-size:11px;font-weight:600}
+.pay-ms{border:0.5px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px}
+.sup-card{border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sup-av{width:36px;height:36px;border-radius:50%;background:var(--bluebg);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--blue);flex-shrink:0}
+.tab-content{display:none}.tab-content.active{display:block}
+.ri{font-size:20px;font-weight:600;width:100%;padding:6px 0;border:none;border-bottom:1px solid var(--border2);background:none;color:var(--text1);outline:none;font-family:inherit}
+.inv-upload{border:1.5px dashed var(--border2);border-radius:var(--radius);padding:12px;text-align:center;cursor:pointer;font-size:12px;color:var(--text2)}
+.inv-upload:hover{border-color:var(--blue);color:var(--text1)}
+.inv-file{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg2);border-radius:var(--radius);font-size:12px;margin-top:6px}
+.prod-group-hdr{padding:4px 10px;font-size:10px;font-weight:700;color:var(--text2);letter-spacing:.06em;text-transform:uppercase;background:var(--bg2)}
+.prod-opt{padding:8px 10px;cursor:pointer;font-size:13px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.prod-opt:last-child{border-bottom:none}.prod-opt:hover{background:var(--bg2)}
+@media(max-width:700px){.g4{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}.frow,.frow3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="mroot"></div>
+<div id="app" style="display:none">
+<div class="sfh">
+  <div class="sfb">Stockflow</div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+    <span style="font-size:12px;padding:3px 10px;border:0.5px solid var(--border);border-radius:99px;color:var(--text2)">🇺🇸 Tidal Wave</span>
+    <span style="font-size:12px;padding:3px 10px;border:0.5px solid var(--border);border-radius:99px;color:var(--text2)">🇦🇺 Internal WH</span>
+    <button class="btn" id="sh-btn" style="font-size:12px;padding:4px 10px">◯ ShipHero</button>
+    <button class="btn" id="sk-btn" style="font-size:12px;padding:4px 10px">◯ Shopify</button>
+    <a href="/" style="font-size:12px;padding:4px 12px;border:0.5px solid var(--border2);border-radius:99px;color:var(--text2);text-decoration:none" onclick="event.preventDefault();doSignOut()">Sign out</a>
+  </div>
+</div>
+<div class="tnav" id="tnav"></div>
+<div class="wrap">
+<div id="tab-overview" class="tab-content"></div>
+<div id="tab-inventory" class="tab-content"></div>
+<div id="tab-bundles" class="tab-content"></div>
+<div id="tab-forecast" class="tab-content"></div>
+<div id="tab-reorder" class="tab-content"></div>
+<div id="tab-po" class="tab-content"></div>
+<div id="tab-suppliers" class="tab-content"></div>
+<div id="tab-payments" class="tab-content"></div>
+<div id="tab-packaging" class="tab-content"></div>
+<div id="tab-boxes" class="tab-content"></div>
+</div>
+<script>
+// ─── SIMPLE PASSWORD AUTH ────────────────────────────────────────────────────
+// Change this password to whatever you want
+const APP_PASSWORD = 'manly2026';
+const AUTH_KEY = 'sf_auth_v1';
 
-export default async function handler(req, res) {
-  if (req.method !== 'GET') return res.status(405).end()
-  res.setHeader('Access-Control-Allow-Origin', '*')
-
-  const domain = process.env.SHOPIFY_STORE_DOMAIN
-  const token = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN
-
-  if (!domain || !token || token === 'leave-blank-for-now') {
-    return res.status(500).json({ error: 'Shopify not configured' })
-  }
-
-  const days = parseInt(req.query?.days) || 30
-  const validDays = (days >= 1 && days <= 90) ? days : 30
-  const forceRefresh = req.query?.refresh === '1'
-  const cacheKey = `shopify_${validDays}`
-
-  // Return cached response if fresh
-  if (!forceRefresh && _cache?.key === cacheKey && Date.now() - _cacheTime < CACHE_TTL) {
-    return res.json({ ..._cache.data, cached: true })
-  }
-
-  const BASE = `https://${domain}/admin/api/2024-04`
-  const HEADERS = { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' }
-
-  const SKU_MAP = {
-    'BWc&c-MANLY': 'Body Wash',
-    'Dc&c-MANLY': 'Deodorant',
-    'SHAc&c-MANLY': 'Shampoo',
-    'CONc&c-MANLY': 'Conditioner',
-    'SSC&C': 'Ball Deodorant',
-    'BB-MANLY': 'Body Buffer',
-    'SCALP-MANLY': 'Scalp Scrubber',
-    'CW-MANLY': 'Cooling Wipes',
-  }
-
-  const TRACKED_SKUS = new Set(Object.keys(SKU_MAP))
-
-  const BUNDLE_COMPONENTS = {
-    'BCKc&c':  ['BWc&c-MANLY','Dc&c-MANLY'],
-    'SEC&C':   ['BWc&c-MANLY','Dc&c-MANLY','SHAc&c-MANLY','CONc&c-MANLY'],
-    'HCKc&c':  ['SHAc&c-MANLY','CONc&c-MANLY'],
-    'STKc&c':  ['BWc&c-MANLY','SHAc&c-MANLY','CONc&c-MANLY'],
-    'BPc&c':   ['SSC&C','BB-MANLY'],
-    'V2FREEGIFTS': ['BB-MANLY','SCALP-MANLY','CW-MANLY'],
-    'SE':      ['BWc&c-MANLY','Dc&c-MANLY','SHAc&c-MANLY','CONc&c-MANLY'],
-    'SE2':     ['BWc&c-MANLY','Dc&c-MANLY','SHAc&c-MANLY','CONc&c-MANLY'],
-    'REPAIR':  ['SHAc&c-MANLY','CONc&c-MANLY'],
-    'ACNEKIT': ['BWc&c-MANLY','Dc&c-MANLY'],
-    'BACNE':   ['BWc&c-MANLY','Dc&c-MANLY'],
-  }
-
-  try {
-    const sinceDate = new Date()
-    sinceDate.setDate(sinceDate.getDate() - validDays)
-
-    // Step 1: products, locations, first orders page — all parallel
-    const [prodRes, locRes, firstOrdersRes] = await Promise.all([
-      fetch(`${BASE}/products.json?limit=250`, { headers: HEADERS }),
-      fetch(`${BASE}/locations.json`, { headers: HEADERS }),
-      fetch(`${BASE}/orders.json?status=any&financial_status=paid&created_at_min=${sinceDate.toISOString()}&limit=250&fields=id,total_price,line_items,shipping_address`, { headers: HEADERS })
-    ])
-
-    if (!prodRes.ok) throw new Error(`products ${prodRes.status}`)
-    if (!locRes.ok) throw new Error(`locations ${locRes.status}`)
-
-    const [prodData, locData] = await Promise.all([prodRes.json(), locRes.json()])
-
-    const itemToSku = {}
-    const skuToItemId = {}
-    for (const p of prodData.products) {
-      for (const v of p.variants) {
-        if (v.sku && v.inventory_item_id) {
-          itemToSku[String(v.inventory_item_id)] = v.sku
-          skuToItemId[v.sku] = String(v.inventory_item_id)
-        }
-      }
-    }
-
-    const locations = locData.locations.filter(l => l.active)
-    const auLocation = locations.find(l => l.name === '11/81 Cooper St, Campbellfield')
-    const trackedItemIds = Object.keys(SKU_MAP).map(s => skuToItemId[s]).filter(Boolean)
-
-    // Step 2: COGS + AU stock in parallel
-    const [cogsRes, invRes] = await Promise.all([
-      trackedItemIds.length > 0
-        ? fetch(`${BASE}/inventory_items.json?ids=${trackedItemIds.join(',')}&limit=250`, { headers: HEADERS })
-        : Promise.resolve(null),
-      auLocation && trackedItemIds.length > 0
-        ? fetch(`${BASE}/inventory_levels.json?location_id=${auLocation.id}&inventory_item_ids=${trackedItemIds.join(',')}&limit=250`, { headers: HEADERS })
-        : Promise.resolve(null)
-    ])
-
-    const cogsBySku = {}
-    if (cogsRes?.ok) {
-      const d = await cogsRes.json()
-      for (const item of d.inventory_items || []) {
-        const sku = itemToSku[String(item.id)]
-        if (sku && item.cost) cogsBySku[sku] = parseFloat(item.cost)
-      }
-    }
-
-    const auStockBySku = {}
-    if (invRes?.ok) {
-      const d = await invRes.json()
-      for (const level of d.inventory_levels || []) {
-        if (String(level.location_id) !== String(auLocation.id)) continue
-        const sku = itemToSku[String(level.inventory_item_id)]
-        if (!sku) continue
-        auStockBySku[sku] = Math.max(0, level.available || 0)
-      }
-    }
-
-    // Step 3: paginate orders — run pages in batches of 3 simultaneously
-    const soldBySkuUS = {}
-    const soldBySkuAU = {}
-    const revBySku = {}
-    let totalRevenue = 0
-    let totalOrders = 0
-
-    // Process first page
-    const processOrders = (ordersData) => {
-      for (const order of ordersData.orders || []) {
-        const country = order.shipping_address?.country_code || 'US'
-        const isAU = country === 'AU'
-        totalRevenue += parseFloat(order.total_price || 0)
-        totalOrders++
-
-        for (const item of order.line_items) {
-          const price = parseFloat(item.price || 0)
-          const qty = item.quantity || 1
-          const sku = item.sku
-          if (!sku || !price) continue
-
-          if (TRACKED_SKUS.has(sku)) {
-            if (isAU) soldBySkuAU[sku] = (soldBySkuAU[sku] || 0) + qty
-            else soldBySkuUS[sku] = (soldBySkuUS[sku] || 0) + qty
-            if (!revBySku[sku]) revBySku[sku] = { rev: 0, qty: 0 }
-            revBySku[sku].rev += price * qty
-            revBySku[sku].qty += qty
-          }
-
-          if (BUNDLE_COMPONENTS[sku]) {
-            const comps = BUNDLE_COMPONENTS[sku]
-            const revPerComp = (price * qty) / comps.length
-            for (const compSku of comps) {
-              if (!TRACKED_SKUS.has(compSku)) continue
-              if (!revBySku[compSku]) revBySku[compSku] = { rev: 0, qty: 0 }
-              revBySku[compSku].rev += revPerComp
-              revBySku[compSku].qty += qty
-            }
-          }
-        }
-      }
-    }
-
-    if (!firstOrdersRes.ok) throw new Error('Orders fetch failed')
-    const firstData = await firstOrdersRes.json()
-    processOrders(firstData)
-
-    // Collect all next-page URLs and fetch in batches of 3
-    let nextUrl = null
-    const getLinkNext = (res) => {
-      const link = res.headers.get('Link') || ''
-      const m = link.match(/<([^>]+)>;\s*rel="next"/)
-      return m ? m[1] : null
-    }
-
-    nextUrl = getLinkNext(firstOrdersRes)
-    let pageCount = 1
-
-    while (nextUrl && pageCount < 50) {
-      // Fetch up to 3 pages at once
-      const batch = []
-      const batchUrls = []
-      for (let i = 0; i < 3 && nextUrl; i++) {
-        batchUrls.push(nextUrl)
-        batch.push(fetch(nextUrl, { headers: HEADERS }))
-        // We don't know the next URL until we get this response, so just do 1 at a time
-        // unless we could pre-compute them (we can't with cursor pagination)
-        break
-      }
-
-      const responses = await Promise.all(batch)
-      for (const r of responses) {
-        if (!r.ok) break
-        const d = await r.json()
-        processOrders(d)
-        nextUrl = getLinkNext(r)
-        pageCount++
-      }
-    }
-
-    // Build response
-    const auStockByProduct = {}
-    const velocityUSByProduct = {}
-    const velocityAUByProduct = {}
-    const avgPriceByProduct = {}
-    const cogsByProduct = {}
-
-    for (const [sku, productName] of Object.entries(SKU_MAP)) {
-      auStockByProduct[productName] = auStockBySku[sku] || 0
-      velocityUSByProduct[productName] = +((soldBySkuUS[sku] || 0) / validDays).toFixed(1)
-      velocityAUByProduct[productName] = +((soldBySkuAU[sku] || 0) / validDays).toFixed(1)
-      const rv = revBySku[sku]
-      avgPriceByProduct[productName] = rv?.qty > 0 ? +(rv.rev / rv.qty).toFixed(2) : 0
-      cogsByProduct[productName] = cogsBySku[sku] || 0
-    }
-
-    const result = {
-      ok: true,
-      source: 'shopify',
-      period_days: validDays,
-      au_stock: auStockByProduct,
-      velocity_us: velocityUSByProduct,
-      velocity_au: velocityAUByProduct,
-      avg_price: avgPriceByProduct,
-      cogs: cogsByProduct,
-      daily_revenue: +(totalRevenue / validDays).toFixed(2),
-      total_revenue: +totalRevenue.toFixed(2),
-      orders_analysed: totalOrders,
-      au_location: auLocation?.name || 'not found',
-      cached: false,
-      cached_at: new Date().toISOString(),
-    }
-
-    // Cache the result
-    _cache = { key: cacheKey, data: result }
-    _cacheTime = Date.now()
-
-    return res.json(result)
-
-  } catch (err) {
-    console.error('[Shopify API]', err.message)
-    return res.status(500).json({ error: err.message })
+function checkAuth() {
+  if (localStorage.getItem(AUTH_KEY) === 'ok') {
+    showApp();
+  } else {
+    showLogin();
   }
 }
+
+function showLogin() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('auth-password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = '';
+}
+
+function doLogin() {
+  const password = document.getElementById('auth-password').value;
+  const errEl = document.getElementById('login-error');
+  const btn = document.getElementById('login-btn');
+
+  if (password === APP_PASSWORD) {
+    localStorage.setItem(AUTH_KEY, 'ok');
+    showApp();
+    loadServerData().then(()=>{
+      syncShopify(document.getElementById('sk-btn'));
+      syncShipHero(document.getElementById('sh-btn'));
+    });
+  } else {
+    errEl.textContent = 'Incorrect password.';
+    errEl.style.display = 'block';
+    btn.style.display = 'block';
+  }
+}
+
+function doSignOut() {
+  localStorage.removeItem(AUTH_KEY);
+  showLogin();
+  document.getElementById('auth-password').value = '';
+  document.getElementById('login-error').style.display = 'none';
+}
+
+window.addEventListener('load', () => {
+  checkAuth();
+  // Always sync from server on every page load (even if already authed)
+  if(localStorage.getItem(AUTH_KEY)==='ok'){
+    loadServerData();
+    syncShopify(document.getElementById('sk-btn'));
+    syncShipHero(document.getElementById('sh-btn'));
+  }
+});
+
+
+var VELOCITY_PERIOD=30;
+var INV_PERIOD=30;
+var DAILY_REV=0;
+const INV_DAILY={tw:{},vi:{}}; // inventory-specific velocity (separate from reorder)
+var DAILY_ORDERS=0;
+var UNITS_SOLD_DATA={};
+const FCS=[{id:'tw',name:'Tidal Wave',flag:'🇺🇸',loc:'United States'},{id:'vi',name:'Internal WH',flag:'🇦🇺',loc:'Victoria, AU'}];
+const TODAY=new Date().toISOString().split('T')[0];
+const SC={'Draft':{bg:'#e2e0d9',tc:'#4f4e4a',pr:0},'Submitted':{bg:'#d8e9f7',tc:'#185fa5',pr:12},'Confirmed':{bg:'#e3e0fc',tc:'#4540a8',pr:25},'In Production':{bg:'#f4dbe8',tc:'#882a4e',pr:38},'Shipped':{bg:'#caeedd',tc:'#0c6849',pr:55},'In Transit':{bg:'#9ddfc6',tc:'#064d3a',pr:68},'Customs':{bg:'#fae0a8',tc:'#7a4808',pr:72},'At FC':{bg:'#f7be58',tc:'#5a3300',pr:85},'Received':{bg:'#d1ecb8',tc:'#2f5e0e',pr:100}};
+const SHOPIFY_PRODUCTS={'Core products':[{t:'Body Wash',sku:'BWc&c-MANLY',p:33.83},{t:'Deodorant',sku:'Dc&c-MANLY',p:31.43},{t:'Shampoo',sku:'SHAc&c-MANLY',p:33.83},{t:'Conditioner',sku:'CONc&c-MANLY',p:33.83},{t:'Ball Deodorant',sku:'SSC&C',p:31.67}],'Free gifts & add-ons':[{t:'Body Buffer',sku:'BB-MANLY',p:20.00},{t:'Scalp Scrubber',sku:'SCALP-MANLY',p:20.00},{t:'Cooling Wipes',sku:'CW-MANLY',p:25.00}],'Accessories':[{t:'Face Towel',sku:null,p:30.00},{t:'Dopp Kit',sku:null,p:30.00}],'Bundles & kits':[{t:'Body Care Kit',sku:'BCKc&c',p:90.26},{t:'Shower Essentials',sku:'SEC&C',p:132.92},{t:'Hair Care Kit',sku:'HCKc&c',p:67.66},{t:'Shower Trio Kit',sku:'STKc&c',p:86.77},{t:'Ball Package',sku:'BPc&c',p:65.50}],'Single products':[{t:'Restore & Hydrate',sku:'RESTOREHYDRATE',p:42.47},{t:'Essentials Package',sku:'OLDSE',p:153.16}],
+'Mailer boxes & packaging':[
+  {t:'Half Mailer Box (2 items)',sku:'MB-HALF',p:0},
+  {t:'Standard Mailer Box (4 bottles + 3 gifts)',sku:'MB-STD',p:0},
+  {t:'Double Mailer Box (2x Standard)',sku:'MB-DBL',p:0},
+  {t:'Quad Mailer Box (4x Standard)',sku:'MB-QUAD',p:0},
+]};
+const ALL_PRODS=Object.values(SHOPIFY_PRODUCTS).flat();
+const CORE_P=['Body Wash','Deodorant','Shampoo','Conditioner','Ball Deodorant'];
+const GIFT_P=['Body Buffer','Scalp Scrubber','Cooling Wipes'];
+const ALL_TRACK=[...CORE_P,...GIFT_P];
+const PRICES=Object.fromEntries(ALL_PRODS.filter(p=>ALL_TRACK.includes(p.t)).map(p=>[p.t,p.p]));
+const BUNDLES=[{n:'Body Care Kit',sku:'BCKc&c',c:{'Body Wash':1,'Deodorant':1},p:90.26},{n:'Shower Essentials',sku:'SEC&C',c:{'Body Wash':1,'Deodorant':1,'Shampoo':1,'Conditioner':1},p:132.92},{n:'Hair Care Kit',sku:'HCKc&c',c:{'Shampoo':1,'Conditioner':1},p:67.66},{n:'Shower Trio Kit',sku:'STKc&c',c:{'Body Wash':1,'Shampoo':1,'Conditioner':1},p:86.77},{n:'Ball Package',sku:'BPc&c',c:{'Ball Deodorant':1,'Body Buffer':1},p:65.50}];
+const DEFAULT_SUPPLIERS=[{id:'s1',name:'Clean Co AU',contact:'James Wilson',email:'orders@cleanceau.com',phone:'+61 3 9000 1234',addr:'12 Supply St, Melbourne VIC 3000',country:'Australia',currency:'AUD',payTerms:'30% deposit, 70% on receipt',bankName:'ANZ Bank',bankAcct:'••••4521',notes:'Primary AU supplier.',terms:{deposit:30,port:0,receipt:70}},{id:'s2',name:'Fresh Supply US',contact:'Sarah Chen',email:'po@freshsupply.com',phone:'+1 310 555 0199',addr:'900 Warehouse Blvd, Los Angeles CA 90001',country:'USA',currency:'USD',payTerms:'30% deposit, 40% at port, 30% on receipt',bankName:'Chase Bank',bankAcct:'••••8832',notes:'Ships direct to Tidal Wave.',terms:{deposit:30,port:40,receipt:30}}];
+let SUPPLIERS=[];
+let nSup=Math.max(3,SUPPLIERS.reduce((m,s)=>Math.max(m,parseInt(s.id.replace('s',''))||0),0)+1);
+// saveSuppliersLocal defined above
+const INV_FILES={};
+
+// ─── SERVER SYNC ─────────────────────────────────────────────────────────────
+let POS=[];
+let SUPPLIERS_LOADED=false;
+let nPO=1;
+
+async function loadServerData(){
+  try{
+    const [posRes,supRes]=await Promise.all([
+      fetch('/api/data/pos'),
+      fetch('/api/data/suppliers')
+    ]);
+    if(posRes.ok){
+      const d=await posRes.json();
+      POS=(d.pos||[]).map(r=>r.data);
+      nPO=Math.max(1,(POS.reduce((m,p)=>{const n=parseInt((p.id||'').replace(/[^0-9]/g,''))||0;return Math.max(m,n)},0)+1));
+    }
+    if(supRes.ok){
+      const d=await supRes.json();
+      // Always use server data (even if empty) — don't fall back to localStorage
+      SUPPLIERS=d.suppliers.map(r=>r.data);
+      nSup=Math.max(3,SUPPLIERS.reduce((m,s)=>Math.max(m,parseInt(s.id.replace('s',''))||0),0)+1);
+    }
+    SUPPLIERS_LOADED=true;
+    rActive();
+  }catch(e){console.error('[Server sync]',e.message);}
+}
+
+async function savePOsLocal(po){
+  // Save to server
+  try{
+    await fetch('/api/data/pos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(po)});
+  }catch(e){console.error('[PO save]',e.message);}
+  // Also keep in localStorage as fallback
+  try{localStorage.setItem('sf_pos',JSON.stringify(POS))}catch(e){}
+}
+
+async function deletePOServer(pid){
+  try{await fetch('/api/data/pos?id='+encodeURIComponent(pid),{method:'DELETE'})}catch(e){console.error('[PO delete]',e.message);}
+  try{localStorage.setItem('sf_pos',JSON.stringify(POS))}catch(e){}
+}
+
+async function saveSuppliersLocal(){
+  // Save all suppliers to server
+  try{
+    await Promise.all(SUPPLIERS.map(s=>
+      fetch('/api/data/suppliers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(s)})
+    ));
+  }catch(e){console.error('[Supplier save]',e.message);}
+  try{localStorage.setItem('sf_suppliers',JSON.stringify(SUPPLIERS))}catch(e){}
+}
+
+async function deleteSupplierServer(sid){
+  try{await fetch('/api/data/suppliers?id='+encodeURIComponent(sid),{method:'DELETE'})}catch(e){console.error('[Supplier delete]',e.message);}
+}
+
+let _unused=1,lineCtx=200,pof={sup:'',fc:'',st:'',df:'',dt:'',prods:[]},aFC='tw',gMode='30',csFrom='',csTo='',tRev=50000,tDays=60,activeTab='po',modalPayments=[],lineIds=[];
+const STOCK={tw:{},vi:{}};const AVG_PRICE={};const COGS={};
+const DAILY={tw:{},vi:{}};
+let shConnected=false,skConnected=false;
+const sup=id=>SUPPLIERS.find(s=>s.id===id)||{name:'Unknown',email:'',addr:'',terms:{deposit:30,port:0,receipt:70},currency:'AUD',payTerms:'',bankName:'',bankAcct:''};
+const fcn=id=>FCS.find(f=>f.id===id)||{name:'—',flag:''};
+const od=po=>po.status!=='Received'&&po.exp&&new Date(po.exp)<new Date(TODAY);
+const fm=n=>Math.round(n).toLocaleString();
+const fmtD=n=>n?new Date(n).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}):'—';
+const dv=(fc,p)=>{const s=STOCK[fc]?.[p]??0,d=DAILY[fc]?.[p]??0;return s>0&&d>0?Math.floor(s/d):s===0?null:999};
+const dvWithPeriod=(fc,p,vel)=>{const s=STOCK[fc]?.[p]??0,d=vel[fc]?.[p]??0;return s>0&&d>0?Math.floor(s/d):s===0?null:999};
+const bdg=d=>d===null?'<span class="bdg bmu">—</span>':d<=7?`<span class="bdg bdn">${d}d critical</span>`:d<=14?`<span class="bdg bwn">${d}d low</span>`:d<=30?`<span class="bdg bwn">${d}d watch</span>`:`<span class="bdg bok">${d}d good</span>`;
+const cc=d=>d===null?'':d<=7?'cdn':d<=30?'cwn':'cok';
+const poTotal=po=>po.lines.reduce((s,l)=>s+l.o*(l.cost||0),0);
+const payOwed=po=>po.payments.filter(p=>p.status!=='Paid').reduce((s,p)=>s+p.amount,0);
+const overdueP=()=>POS.flatMap(po=>po.payments.filter(p=>p.status==='Overdue').map(p=>({...p,po})));
+const gapDays=()=>gMode==='custom'?(csFrom&&csTo?Math.max(1,Math.round((new Date(csTo)-new Date(csFrom))/864e5)):30):parseInt(gMode);
+const gapLbl=()=>gMode==='custom'&&csFrom&&csTo?`${csFrom} → ${csTo}`:gMode+'d';
+const inbound=()=>{const b={tw:{},vi:{}};POS.filter(p=>p.appr&&p.status!=='Received').forEach(po=>po.lines.forEach(l=>{b[po.fc][l.p]=(b[po.fc][l.p]||0)+(l.o-l.r)}));return b};
+
+function updateDsrc(){
+  if(shConnected&&skConnected){document.getElementById('sh-btn').textContent='● ShipHero';document.getElementById('sh-btn').style.color='var(--green)';document.getElementById('sk-btn').textContent='● Shopify';document.getElementById('sk-btn').style.color='var(--green)'}
+}
+
+async function syncShipHero(btn){
+  btn.textContent='⟳ ShipHero…';btn.disabled=true;
+  try{
+    const r=await fetch('/api/live/shiphero');
+    const d=await r.json();
+    if(!r.ok||d.error)throw new Error(d.error||'ShipHero error');
+    for(const[product,inv]of Object.entries(d.stock)){STOCK.tw[product]=inv.available}
+    shConnected=true;
+    btn.textContent='● ShipHero';btn.style.color='var(--green)';btn.disabled=false;
+    rActive();
+  }catch(e){
+    btn.textContent='✕ ShipHero';btn.style.color='var(--red)';btn.disabled=false;
+    setTimeout(()=>{btn.textContent='◯ ShipHero';btn.style.color='';shConnected=false},3000);
+    console.error('[ShipHero]',e.message);
+  }
+}
+
+async function syncShopify(btn){
+  btn.textContent='⟳ Shopify…';btn.disabled=true;
+  try{
+    const forceRefresh=btn.dataset.force==='1';delete btn.dataset.force;
+    const r=await fetch('/api/live/shopify?days='+VELOCITY_PERIOD+(forceRefresh?'&refresh=1':''));
+    const d=await r.json();
+    if(!r.ok||d.error)throw new Error(d.error||'Shopify error');
+    if(d.au_stock){for(const[product,qty]of Object.entries(d.au_stock)){STOCK.vi[product]=qty}}
+    if(d.velocity_us){if(!DAILY.tw)DAILY.tw={};for(const[product,vel]of Object.entries(d.velocity_us)){DAILY.tw[product]=vel;INV_DAILY.tw[product]=vel}}
+    if(d.velocity_au){if(!DAILY.vi)DAILY.vi={};for(const[product,vel]of Object.entries(d.velocity_au)){DAILY.vi[product]=vel;INV_DAILY.vi[product]=vel}}
+    if(d.avg_price){for(const[product,price]of Object.entries(d.avg_price)){AVG_PRICE[product]=price}}
+    if(d.cogs){for(const[product,cost]of Object.entries(d.cogs)){COGS[product]=cost}}
+    if(d.units_sold){for(const[product,qty]of Object.entries(d.units_sold)){UNITS_SOLD_DATA[product]=qty}}
+    if(d.daily_revenue)DAILY_REV=d.daily_revenue;
+    if(d.orders_analysed&&d.period_days)DAILY_ORDERS=d.orders_analysed/d.period_days;
+    if(d.period_days)VELOCITY_PERIOD=d.period_days;
+    skConnected=true;
+    btn.textContent=d.cached?'● Shopify (cached)':'● Shopify';btn.style.color='var(--green)';btn.disabled=false;
+    btn.title=d.cached?'Cached at '+new Date(d.cached_at).toLocaleTimeString()+' — click to refresh':'Live data';
+    btn.ondblclick=()=>{btn.dataset.force='1';syncShopify(btn)};
+    rActive();
+  }catch(e){
+    btn.textContent='✕ Shopify';btn.style.color='var(--red)';btn.disabled=false;
+    setTimeout(()=>{btn.textContent='◯ Shopify';btn.style.color='';skConnected=false},3000);
+    console.error('[Shopify]',e.message);
+  }
+}
+
+document.getElementById('sh-btn').addEventListener('click',function(){
+  if(shConnected){shConnected=false;Object.keys(STOCK.tw).forEach(k=>delete STOCK.tw[k]);this.textContent='◯ ShipHero';this.style.color='';rActive();return}
+  syncShipHero(this);
+});
+document.getElementById('sk-btn').addEventListener('click',function(){
+  if(skConnected){skConnected=false;this.textContent='◯ Shopify';this.style.color='';rActive();return}
+  syncShopify(this);
+});
+
+window.addEventListener('load',()=>{
+  syncShopify(document.getElementById('sk-btn'));
+  syncShipHero(document.getElementById('sh-btn'));
+});
+
+function openM(html){const r=document.getElementById('mroot');r.innerHTML=`<div class="moverlay" id="mov">${html}</div>`;document.getElementById('mov').addEventListener('click',e=>{if(e.target.id==='mov')closeM()})}
+function closeM(){document.getElementById('mroot').innerHTML=''}
+function sPill(po){const s=SC[po.status]||{bg:'#eee',tc:'#333'};const opts=Object.entries(SC).map(([k,v])=>`<div class="sopt" style="background:${v.bg};color:${v.tc}" onclick="setSt(event,'${po.id}','${k}')">${k}</div>`).join('');return`<span class="spill" style="background:${s.bg};color:${s.tc}" onclick="togDrop(event,'${po.id}')">${po.status} ▾<span class="sdrop" id="sd-${po.id}">${opts}</span></span>`}
+function togDrop(e,id){e.stopPropagation();const d=document.getElementById('sd-'+id);if(!d)return;const open=d.style.display==='block';document.querySelectorAll('.sdrop').forEach(x=>x.style.display='none');if(!open){d.style.display='block';setTimeout(()=>document.addEventListener('click',()=>document.querySelectorAll('.sdrop').forEach(x=>x.style.display='none'),{once:true}),30)}}
+function setSt(e,id,st){e.stopPropagation();const po=POS.find(p=>p.id===id);if(!po)return;po.status=st;if(st!=='Draft')po.appr=true;savePOsLocal(po);document.querySelectorAll('.sdrop').forEach(x=>x.style.display='none');rActive()}
+function prodDropHtml(q){let html='';for(const[grp,prods]of Object.entries(SHOPIFY_PRODUCTS)){const match=prods.filter(p=>!q||p.t.toLowerCase().includes(q.toLowerCase())||(p.sku&&p.sku.toLowerCase().includes(q.toLowerCase())));if(!match.length)continue;html+=`<div class="prod-group-hdr">${grp}</div>`;match.forEach(p=>{html+=`<div class="prod-opt" onclick="selProd(event,'${p.t}','${p.sku||''}')"><span>${p.t}${p.sku?` <span style="color:var(--text2);font-size:11px">· ${p.sku}</span>`:''}</span><span style="font-size:11px;color:var(--text2)">$${p.p.toFixed(2)}</span></div>`})}return html||'<div style="padding:10px;font-size:13px;color:var(--text2)">No products</div>'}
+function prodPickerHtml(lid,selTitle=''){return`<div style="position:relative"><input class="form-in" id="pp-s-${lid}" placeholder="Search products…" autocomplete="off" value="${selTitle}" oninput="filterProds('${lid}')" onfocus="showPD('${lid}')"><input type="hidden" id="pp-v-${lid}" value="${selTitle}"><div id="pp-d-${lid}" style="display:none;position:absolute;top:calc(100%+2px);left:0;right:0;z-index:400;background:var(--bg1);border:0.5px solid var(--border2);border-radius:var(--radius);max-height:200px;overflow-y:auto;box-shadow:0 4px 14px rgba(0,0,0,.12)">${prodDropHtml('')}</div></div>`}
+function filterProds(lid){const q=document.getElementById('pp-s-'+lid)?.value||'';const d=document.getElementById('pp-d-'+lid);if(d){d.innerHTML=prodDropHtml(q);d.style.display='block'}}
+function showPD(lid){const d=document.getElementById('pp-d-'+lid);if(d)d.style.display='block';setTimeout(()=>document.addEventListener('click',e=>{const d=document.getElementById('pp-d-'+lid);if(d&&!d.contains(e.target)&&e.target.id!=='pp-s-'+lid)d.style.display='none'},{once:true}),30)}
+function selProd(e,title,sku){e.stopPropagation();const drop=e.target.closest('[id^="pp-d-"]');if(!drop)return;const lid=drop.id.replace('pp-d-','');const s=document.getElementById('pp-s-'+lid);const v=document.getElementById('pp-v-'+lid);if(s)s.value=title;if(v)v.value=title;drop.style.display='none'}
+function initPayments(s,total){const t=s.terms||{deposit:30,port:0,receipt:70};const pays=[];if(t.deposit>0)pays.push({id:'np'+Date.now(),type:'Deposit',pct:t.deposit,amount:+(total*t.deposit/100).toFixed(2),invNum:'',invDate:'',dueDate:'',paidDate:'',status:'Unpaid'});if(t.port>0)pays.push({id:'np'+(Date.now()+1),type:'At Port',pct:t.port,amount:+(total*t.port/100).toFixed(2),invNum:'',invDate:'',dueDate:'',paidDate:'',status:'Unpaid'});if(t.receipt>0)pays.push({id:'np'+(Date.now()+2),type:'On Receipt',pct:t.receipt,amount:+(total*t.receipt/100).toFixed(2),invNum:'',invDate:'',dueDate:'',paidDate:'',status:'Unpaid'});return pays}
+function calcLineTotal(){return lineIds.reduce((s,i)=>{const o=parseInt(document.getElementById('flo-'+i)?.value)||0;const c=parseFloat(document.getElementById('flc-'+i)?.value)||0;return s+o*c},0)}
+function recalcPay(){const total=calcLineTotal();modalPayments.forEach(p=>{p.amount=+(total*p.pct/100).toFixed(2)});const el=document.getElementById('pay-ms-form');if(el)el.innerHTML=msFormHtml()}
+function msFormHtml(){if(!modalPayments.length)return'<div class="sn">No milestones.</div>';return modalPayments.map((p,i)=>`<div class="pay-ms" id="pm-${i}"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><select class="sf-sel" style="font-size:12px;padding:3px 8px" id="pm-t-${i}">${['Deposit','On Shipping','At Port','On Receipt','Other'].map(t=>`<option ${p.type===t?'selected':''}>${t}</option>`).join('')}</select><input class="form-in" type="number" style="width:52px;padding:3px 6px;font-size:12px" id="pm-p-${i}" value="${p.pct}" min="0" max="100" onchange="modalPayments[${i}].pct=+this.value;recalcPay()">%<span style="font-size:12px;font-weight:600">= $<span id="pm-a-${i}">${p.amount.toFixed(2)}</span></span></div><button style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--text2)" onclick="rmMs(${i})">✕</button></div><div class="frow3"><div><div class="form-lbl">Invoice no.</div><input class="form-in" id="pm-in-${i}" value="${p.invNum||''}" placeholder="INV-2026-001"></div><div><div class="form-lbl">Invoice date</div><input class="form-in" type="date" id="pm-id-${i}" value="${p.invDate||''}"></div><div><div class="form-lbl">Due date</div><input class="form-in" type="date" id="pm-dd-${i}" value="${p.dueDate||''}"></div></div><div class="frow"><div><div class="form-lbl">Date paid</div><input class="form-in" type="date" id="pm-pd-${i}" value="${p.paidDate||''}" onchange="if(this.value){document.getElementById('pm-s-${i}').value='Paid';modalPayments[${i}].status='Paid'}"></div><div><div class="form-lbl">Status</div><select class="form-sel" id="pm-s-${i}">${['Unpaid','Paid','Overdue'].map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></div></div><div><div class="form-lbl">Invoice file</div>${INV_FILES[p.id]?`<div class="inv-file"><span>📄 ${INV_FILES[p.id].name}</span><button class="btn bts" onclick="viewInv('${p.id}')">View</button><button class="btn bts" style="color:var(--red)" onclick="delInv('${p.id}')">Remove</button></div>`:`<div class="inv-upload" onclick="document.getElementById('inv-up-${i}').click()">📎 Click to attach invoice</div>`}<input type="file" id="inv-up-${i}" accept=".pdf,.png,.jpg,.jpeg" style="display:none" onchange="uploadInv(this,'${p.id}')"></div></div>`).join('')}
+function uploadInv(input,payId){const file=input.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{INV_FILES[payId]={name:file.name,type:file.type,dataUrl:e.target.result};const el=document.getElementById('pay-ms-form');if(el)el.innerHTML=msFormHtml()};reader.readAsDataURL(file)}
+function delInv(payId){delete INV_FILES[payId];const el=document.getElementById('pay-ms-form');if(el)el.innerHTML=msFormHtml()}
+function viewInv(payId){const f=INV_FILES[payId];if(!f)return;if(f.type==='application/pdf'){const w=window.open('');w.document.write(`<iframe src="${f.dataUrl}" style="width:100%;height:100vh;border:none"></iframe>`)}else{const w=window.open('');w.document.write(`<img src="${f.dataUrl}" style="max-width:100%;display:block;margin:auto">`)}}
+function addMs(){modalPayments.push({id:'np'+Date.now(),type:'Other',pct:0,amount:0,invNum:'',invDate:'',dueDate:'',paidDate:'',status:'Unpaid'});const el=document.getElementById('pay-ms-form');if(el)el.innerHTML=msFormHtml()}
+function rmMs(i){modalPayments.splice(i,1);const el=document.getElementById('pay-ms-form');if(el)el.innerHTML=msFormHtml()}
+function collectMs(){return modalPayments.map((p,i)=>({...p,type:document.getElementById('pm-t-'+i)?.value||p.type,pct:parseFloat(document.getElementById('pm-p-'+i)?.value)||p.pct,amount:parseFloat(document.getElementById('pm-a-'+i)?.textContent)||p.amount,invNum:document.getElementById('pm-in-'+i)?.value||'',invDate:document.getElementById('pm-id-'+i)?.value||'',dueDate:document.getElementById('pm-dd-'+i)?.value||'',paidDate:document.getElementById('pm-pd-'+i)?.value||'',status:document.getElementById('pm-s-'+i)?.value||p.status}))}
+function lineHtml(i,l){return`<div style="display:grid;grid-template-columns:1fr 70px 80px 80px 22px;gap:7px;align-items:center;margin-bottom:7px" id="pl-${i}">${prodPickerHtml(i,l.p||'')}<input class="form-in" type="number" id="flo-${i}" value="${l.o||0}" min="0" onchange="recalcPay()"><input class="form-in" type="number" id="flr-${i}" value="${l.r||0}" min="0"><input class="form-in" type="number" id="flc-${i}" value="${l.cost||''}" placeholder="Cost" step="0.01" onchange="recalcPay()"><button style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--text2);padding:0 2px" onclick="rmLine(${i})">✕</button></div>`}
+function addLine(){lineCtx++;lineIds.push(lineCtx);document.getElementById('plc').insertAdjacentHTML('beforeend',lineHtml(lineCtx,{p:'',o:0,r:0,cost:''}))}
+function rmLine(i){const e=document.getElementById('pl-'+i);if(e){e.remove();lineIds=lineIds.filter(x=>x!==i)}}
+function supInfoHtml(s){return s?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 16px;font-size:12px"><div><span style="color:var(--text2)">Contact:</span> ${s.contact||'—'}</div><div><span style="color:var(--text2)">Email:</span> ${s.email||'—'}</div><div><span style="color:var(--text2)">Address:</span> ${s.addr||'—'}</div><div><span style="color:var(--text2)">Terms:</span> ${s.payTerms||'—'}</div></div>`:''}
+function openPO(pid){
+  const po=pid?POS.find(p=>p.id===pid):null;
+  lineIds=[];
+  const initL=po?po.lines:[{p:'',o:0,r:0,cost:''}];
+  initL.forEach((_,i)=>lineIds.push(i));
+  modalPayments=po?JSON.parse(JSON.stringify(po.payments)):initPayments(SUPPLIERS[0],0);
+  const s=po?sup(po.supId):SUPPLIERS[0];
+  openM(`<div class="mbox"><h3>${po?'Edit PO — '+po.id:'New Purchase Order'}</h3>
+    <div class="frow1"><div class="form-lbl">Supplier</div><select class="form-sel" id="f-sup" onchange="onSupCh(this.value)">${SUPPLIERS.map(s=>`<option value="${s.id}" ${po&&po.supId===s.id?'selected':''}>${s.name}</option>`).join('')}</select></div>
+    <div id="sup-info" style="background:var(--bg2);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:12px">${supInfoHtml(s)}</div>
+    <div class="frow"><div><div class="form-lbl">PO number</div><input class="form-in" id="f-id" value="${po?po.id:'PO-00'+nPO}"></div><div><div class="form-lbl">Fulfilment centre</div><select class="form-sel" id="f-fc">${FCS.map(f=>`<option value="${f.id}" ${po&&po.fc===f.id?'selected':''}>${f.flag} ${f.name}</option>`).join('')}</select></div></div>
+    <div class="frow"><div><div class="form-lbl">Status</div><select class="form-sel" id="f-st">${Object.keys(SC).map(s=>`<option ${po&&po.status===s?'selected':''}>${s}</option>`).join('')}</select></div><div><div class="form-lbl">Expected delivery</div><input class="form-in" type="date" id="f-dt" value="${po?po.exp:''}" min="${TODAY}"></div></div>
+    <div class="frow1"><div class="form-lbl">Notes</div><input class="form-in" id="f-nt" value="${po?po.notes:''}" placeholder="Shipping notes, customs ref…"></div>
+    <div style="font-size:12px;font-weight:600;margin-bottom:6px">Order lines</div>
+    <div style="display:grid;grid-template-columns:1fr 70px 80px 80px 22px;gap:7px;margin-bottom:4px"><div class="form-lbl">Product</div><div class="form-lbl">Ordered</div><div class="form-lbl">Received</div><div class="form-lbl">Unit cost</div><div></div></div>
+    <div id="plc">${initL.map((l,i)=>lineHtml(i,l)).join('')}</div>
+    <button class="btn bts" style="margin:4px 0 14px" onclick="addLine()">+ Add product</button>
+    <div style="font-size:12px;font-weight:600;margin-bottom:8px">Payment milestones</div>
+    <div id="pay-ms-form">${msFormHtml()}</div>
+    <button class="btn bts" style="margin:4px 0 14px" onclick="addMs()">+ Add milestone</button>
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;padding-top:10px;border-top:0.5px solid var(--border)">
+      <button class="btn" onclick="closeM()">Cancel</button>
+      ${po?`<button class="btd" onclick="closeM();confirmDeletePO('${po.id}')">Delete PO</button>`:''}
+      ${po&&!po.appr?`<button class="btn" style="color:var(--green);border-color:var(--green)" onclick="savePO('${po.id}',true)">Approve & save</button>`:''}
+      <button class="btn btp" onclick="savePO(${po?`'${po.id}'`:null},false)">Save PO</button>
+    </div></div>`);
+}
+function onSupCh(supId){const s=sup(supId);const el=document.getElementById('sup-info');if(el)el.innerHTML=supInfoHtml(s);modalPayments=initPayments(s,calcLineTotal());const el2=document.getElementById('pay-ms-form');if(el2)el2.innerHTML=msFormHtml()}
+function savePO(pid,appr){
+  const lines=lineIds.map(i=>({p:document.getElementById('pp-v-'+i)?.value||'',sku:ALL_PRODS.find(x=>x.t===document.getElementById('pp-v-'+i)?.value)?.sku||'',o:parseInt(document.getElementById('flo-'+i)?.value)||0,r:parseInt(document.getElementById('flr-'+i)?.value)||0,cost:parseFloat(document.getElementById('flc-'+i)?.value)||0})).filter(l=>l.p&&l.o>0);
+  const payments=collectMs();const nst=document.getElementById('f-st').value;const supId=document.getElementById('f-sup').value;
+  if(pid){const idx=POS.findIndex(p=>p.id===pid);POS[idx]={...POS[idx],supId,fc:document.getElementById('f-fc').value,status:nst,exp:document.getElementById('f-dt').value,lines,notes:document.getElementById('f-nt').value,appr:appr||POS[idx].appr,payments};savePOsLocal(POS[idx])}
+  else{const newPO={id:document.getElementById('f-id').value||'PO-00'+nPO,supId,fc:document.getElementById('f-fc').value,status:nst,created:TODAY,exp:document.getElementById('f-dt').value,lines,notes:document.getElementById('f-nt').value,appr,payments};POS.push(newPO);nPO++;savePOsLocal(newPO)}
+  closeM();rActive()
+}
+function confirmDeletePO(pid){
+  const po=POS.find(p=>p.id===pid);if(!po)return;
+  const s=sup(po.supId);const hasPaid=po.payments.some(p=>p.status==='Paid');
+  openM(`<div class="mbox-sm"><h3 style="color:var(--red)">Delete ${po.id}?</h3>
+    <div style="background:var(--redbg);border-radius:var(--radius);padding:14px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:600;color:var(--red);margin-bottom:8px">This cannot be undone.</div>
+      <div style="font-size:12px;color:var(--red);line-height:1.6"><div>Supplier: <strong>${s.name}</strong></div><div>Status: <strong>${po.status}</strong></div></div>
+    </div>
+    ${hasPaid?`<div style="background:var(--warnbg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--warn);margin-bottom:14px">⚠ This PO has recorded payments.</div>`:''}
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" onclick="closeM()">Cancel</button>
+      <button style="font-size:13px;padding:7px 18px;border:none;border-radius:99px;background:var(--red);color:#fff;cursor:pointer;font-family:inherit;font-weight:600" onclick="deletePO('${pid}')">Yes, delete PO</button>
+    </div></div>`);
+}
+function deletePO(pid){const po=POS.find(p=>p.id===pid);if(po)po.payments.forEach(pay=>{delete INV_FILES[pay.id]});const delPo=POS.find(p=>p.id===pid);POS=POS.filter(p=>p.id!==pid);if(delPo)deletePOServer(delPo.id);closeM();rActive()}
+function openPayDetail(pid){
+  const po=POS.find(p=>p.id===pid);if(!po)return;
+  const s=sup(po.supId);
+  openM(`<div class="mbox"><h3>Payments — ${po.id}</h3>
+    <div style="background:var(--bg2);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:12px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px 16px">
+      <div><span style="color:var(--text2)">Supplier:</span> <strong>${s.name}</strong></div><div><span style="color:var(--text2)">Currency:</span> ${s.currency}</div><div><span style="color:var(--text2)">PO value:</span> <strong>$${fm(poTotal(po))}</strong></div>
+      <div><span style="color:var(--text2)">Terms:</span> ${s.payTerms||'—'}</div><div style="color:var(--green)">Paid: <strong>$${fm(po.payments.filter(p=>p.status==='Paid').reduce((s,p)=>s+p.amount,0))}</strong></div><div style="color:var(--warn)">Owed: <strong>$${fm(payOwed(po))}</strong></div>
+    </div>
+    ${po.payments.map(p=>{const f=INV_FILES[p.id];return`<div class="pay-ms" style="${p.status==='Overdue'?'border-color:var(--red)':''}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px">
+        <div style="display:flex;align-items:center;gap:8px"><span style="font-size:13px;font-weight:600">${p.type}</span><span style="font-size:13px;font-weight:600">$${fm(p.amount)}</span></div>
+        <div style="display:flex;align-items:center;gap:6px"><span class="bdg ${p.status==='Paid'?'bok':p.status==='Overdue'?'bdn':'bmu'}">${p.status}</span>${p.status!=='Paid'?`<button class="btn bts" style="color:var(--green);border-color:var(--green)" onclick="markPaid('${pid}','${p.id}')">Mark paid</button>`:''}<button class="btn bts" onclick="editPayMs('${pid}','${p.id}')">Edit</button></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:12px;margin-bottom:8px">
+        <div><span style="color:var(--text2)">Invoice:</span> ${p.invNum||'—'}</div><div><span style="color:var(--text2)">Due:</span> ${fmtD(p.dueDate)||'—'}</div>${p.paidDate?`<div><span style="color:var(--text2)">Paid:</span> <strong>${fmtD(p.paidDate)}</strong></div>`:''}
+      </div>
+      ${f?`<div class="inv-file"><span>📄 ${f.name}</span><button class="btn bts" onclick="viewInv('${p.id}')">View</button></div>`:`<label class="inv-upload" style="cursor:pointer;display:block">📎 Attach invoice<input type="file" accept=".pdf,.png,.jpg,.jpeg" style="display:none" onchange="uploadInvDirect(this,'${p.id}','${pid}')"></label>`}
+    </div>`}).join('')}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn" onclick="closeM()">Close</button><button class="btn btp" onclick="closeM();openPO('${pid}')">Edit full PO</button></div></div>`);
+}
+function uploadInvDirect(input,payId,pid){const file=input.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{INV_FILES[payId]={name:file.name,type:file.type,dataUrl:e.target.result};openPayDetail(pid)};reader.readAsDataURL(file)}
+function editPayMs(pid,payId){
+  const po=POS.find(p=>p.id===pid);if(!po)return;const p=po.payments.find(x=>x.id===payId);if(!p)return;const f=INV_FILES[payId];
+  openM(`<div class="mbox"><h3>Edit payment — ${p.type} on ${pid}</h3>
+    <div class="frow"><div><div class="form-lbl">Type</div><select class="form-sel" id="ep-t">${['Deposit','On Shipping','At Port','On Receipt','Other'].map(t=>`<option ${p.type===t?'selected':''}>${t}</option>`).join('')}</select></div><div><div class="form-lbl">Amount ($)</div><input class="form-in" type="number" id="ep-a" value="${p.amount}" step="0.01"></div></div>
+    <div class="frow"><div><div class="form-lbl">Invoice number</div><input class="form-in" id="ep-in" value="${p.invNum||''}" placeholder="INV-2026-001"></div><div><div class="form-lbl">Due date</div><input class="form-in" type="date" id="ep-dd" value="${p.dueDate||''}"></div></div>
+    <div class="frow"><div><div class="form-lbl">Date paid</div><input class="form-in" type="date" id="ep-pd" value="${p.paidDate||''}"></div><div><div class="form-lbl">Status</div><select class="form-sel" id="ep-s">${['Unpaid','Paid','Overdue'].map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></div></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;padding-top:10px;border-top:0.5px solid var(--border)"><button class="btn" onclick="openPayDetail('${pid}')">Cancel</button><button class="btn btp" onclick="savePayMs('${pid}','${payId}')">Save changes</button></div></div>`);
+}
+function savePayMs(pid,payId){const po=POS.find(p=>p.id===pid);if(!po)return;const p=po.payments.find(x=>x.id===payId);if(!p)return;p.type=document.getElementById('ep-t').value;p.amount=parseFloat(document.getElementById('ep-a').value)||p.amount;p.status=document.getElementById('ep-s').value;p.invNum=document.getElementById('ep-in').value;p.dueDate=document.getElementById('ep-dd').value;p.paidDate=document.getElementById('ep-pd').value;savePOsLocal(po);openPayDetail(pid);rActive()}
+function markPaid(pid,payId){const po=POS.find(p=>p.id===pid);if(!po)return;const p=po.payments.find(x=>x.id===payId);if(!p)return;p.status='Paid';p.paidDate=TODAY;savePOsLocal(po);openPayDetail(pid);rActive()}
+function sumT(t){const tot=(t?.deposit||0)+(t?.port||0)+(t?.receipt||0);const ok=tot===100;return`<span style="font-size:12px;font-weight:600;color:${ok?'var(--green)':'var(--red)'}">Total: ${tot}% ${ok?'✓':'— must equal 100%'}</span>`}
+function recalcT(){const t={deposit:+document.getElementById('st-d')?.value||0,port:+document.getElementById('st-p')?.value||0,receipt:+document.getElementById('st-r')?.value||0};const el=document.getElementById('terms-tot');if(el)el.innerHTML=sumT(t)}
+function openSupplier(sid){
+  const s=sid?SUPPLIERS.find(x=>x.id===sid):null;
+  openM(`<div class="mbox"><h3>${s?'Edit supplier — '+s.name:'Add new supplier'}</h3>
+    <div class="frow"><div><div class="form-lbl">Company name</div><input class="form-in" id="sn" value="${s?s.name:''}"></div><div><div class="form-lbl">Contact name</div><input class="form-in" id="sc" value="${s?s.contact:''}"></div></div>
+    <div class="frow"><div><div class="form-lbl">Email</div><input class="form-in" type="email" id="se" value="${s?s.email:''}"></div><div><div class="form-lbl">Phone</div><input class="form-in" id="sp" value="${s?s.phone:''}"></div></div>
+    <div class="frow1"><div class="form-lbl">Full address</div><input class="form-in" id="sa" value="${s?s.addr:''}"></div>
+    <div class="frow"><div><div class="form-lbl">Country</div><input class="form-in" id="sco" value="${s?s.country:''}"></div><div><div class="form-lbl">Currency</div><select class="form-sel" id="scu">${['AUD','USD','EUR','GBP','CNY'].map(c=>`<option ${s&&s.currency===c?'selected':''}>${c}</option>`).join('')}</select></div></div>
+    <div style="font-size:12px;font-weight:600;margin:12px 0 8px">Payment terms</div>
+    <div style="background:var(--bg2);border-radius:var(--radius);padding:12px">
+      <div class="frow3"><div><div class="form-lbl">Deposit %</div><input class="form-in" type="number" id="st-d" value="${s?s.terms.deposit:30}" min="0" max="100" onchange="recalcT()"></div><div><div class="form-lbl">At port %</div><input class="form-in" type="number" id="st-p" value="${s?s.terms.port:0}" min="0" max="100" onchange="recalcT()"></div><div><div class="form-lbl">On receipt %</div><input class="form-in" type="number" id="st-r" value="${s?s.terms.receipt:70}" min="0" max="100" onchange="recalcT()"></div></div>
+      <div id="terms-tot">${sumT(s?s.terms:{deposit:30,port:0,receipt:70})}</div>
+      <div style="margin-top:8px"><div class="form-lbl">Description</div><input class="form-in" id="st-desc" value="${s?s.payTerms:'30% deposit, 70% on receipt'}"></div>
+    </div>
+    <div style="font-size:12px;font-weight:600;margin:12px 0 8px">Banking details</div>
+    <div class="frow"><div><div class="form-lbl">Bank name</div><input class="form-in" id="sb-b" value="${s?s.bankName:''}"></div><div><div class="form-lbl">Account number</div><input class="form-in" id="sb-a" value="" placeholder="Will be masked after save"></div></div>
+    <div class="frow1"><div class="form-lbl">Notes</div><input class="form-in" id="sno" value="${s?s.notes:''}"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:12px;border-top:0.5px solid var(--border);margin-top:12px"><button class="btn" onclick="closeM()">Cancel</button>${s?`<button class="btd" onclick="closeM();deleteSup('${s.id}')">Delete supplier</button>`:''}<button class="btn btp" onclick="saveSup(${s?`'${s.id}'`:null})">Save supplier</button></div></div>`);
+}
+function deleteSup(sid){
+  const s=SUPPLIERS.find(x=>x.id===sid);if(!s)return;
+  const hasPOs=POS.some(p=>p.supId===sid);
+  if(hasPOs&&!confirm(s.name+' has existing POs. Delete anyway?'))return;
+  SUPPLIERS=SUPPLIERS.filter(x=>x.id!==sid);saveSuppliersLocal();deleteSupplierServer(sid);
+  closeM();rSuppliers();
+}
+function saveSup(sid){const acct=document.getElementById('sb-a').value;const masked=acct.length>4?'••••'+acct.slice(-4):acct||'';const data={name:document.getElementById('sn').value,contact:document.getElementById('sc').value,email:document.getElementById('se').value,phone:document.getElementById('sp').value,addr:document.getElementById('sa').value,country:document.getElementById('sco').value,currency:document.getElementById('scu').value,payTerms:document.getElementById('st-desc').value,bankName:document.getElementById('sb-b').value,bankAcct:masked,notes:document.getElementById('sno').value,terms:{deposit:+document.getElementById('st-d').value||0,port:+document.getElementById('st-p').value||0,receipt:+document.getElementById('st-r').value||0}};if(sid){const idx=SUPPLIERS.findIndex(s=>s.id===sid);SUPPLIERS[idx]={...SUPPLIERS[idx],...data};saveSuppliersLocal()}else{SUPPLIERS.push({id:'s'+nSup,...data});nSup++}saveSuppliersLocal();closeM();rSuppliers()}
+function rOverview(){
+  const ib=inbound();const tot=ALL_TRACK.reduce((s,p)=>s+FCS.reduce((a,f)=>a+(STOCK[f.id]?.[p]??0),0),0);const val=ALL_TRACK.reduce((s,p)=>s+FCS.reduce((a,f)=>a+(STOCK[f.id]?.[p]??0),0)*(PRICES[p]??0),0);const allD=FCS.flatMap(f=>ALL_TRACK.map(p=>dvWithPeriod(f.id,p,velSrcOv))).filter(d=>d!==null);const avgD=allD.length?Math.round(allD.reduce((a,b)=>a+b,0)/allD.length):0;const totalOwed=POS.reduce((s,po)=>s+payOwed(po),0);const ovdP=overdueP();const vel=ALL_TRACK.map(p=>({p,dUS:DAILY.tw?.[p]??0,dAU:DAILY.vi?.[p]??0})).sort((a,b)=>(b.dUS+b.dAU)-(a.dUS+a.dAU));const hasInvD=Object.keys(INV_DAILY.tw).length>0||Object.keys(INV_DAILY.vi).length>0;const velSrcOv=hasInvD?INV_DAILY:DAILY;const alerts=FCS.flatMap(f=>ALL_TRACK.map(p=>({f,p,d:dvWithPeriod(f.id,p,velSrcOv)}))).filter(a=>a.d!==null&&a.d<=30).sort((a,b)=>a.d-b.d);
+  document.getElementById('tab-overview').innerHTML=`
+    <div class="g4"><div class="mc"><div class="ml">Total units</div><div class="mv">${fm(tot)}</div><div class="ms">All FCs · ${ALL_TRACK.length} products</div></div><div class="mc"><div class="ml">Est. stock value</div><div class="mv">$${fm(val)}</div></div><div class="mc"><div class="ml">Avg days coverage</div><div class="mv" style="${avgD<=14?'color:var(--red)':avgD<=30?'color:var(--warn)':''}">${avgD?avgD+'d':'—'}</div></div><div class="mc"><div class="ml">Payments owed</div><div class="mv" style="${totalOwed?'color:var(--warn)':''}">$${fm(totalOwed)}</div><div class="ms">${ovdP.length} overdue</div></div></div>
+    <div class="g2">
+      <div class="card"><div class="ct">Stock alerts ≤30d</div>${alerts.length?alerts.slice(0,7).map(a=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:0.5px solid var(--border)"><span style="font-size:13px;font-weight:600">${a.f.flag} ${a.f.name} — ${a.p}</span>${bdg(a.d)}</div>`).join(''):'<div class="sn">All products 30d+ covered or no stock data yet.</div>'}</div>
+      <div class="card"><div class="ct">Sales velocity <span class="bdg bmu">${VELOCITY_PERIOD}d avg</span></div><table class="sf-t"><thead><tr><th>Product</th><th>Type</th><th style="text-align:right">🇺🇸 US/d</th><th style="text-align:right">🇦🇺 AU/d</th><th style="text-align:right">Total/d</th></tr></thead><tbody>${vel.map(v=>`<tr><td style="font-weight:600">${v.p}</td><td>${GIFT_P.includes(v.p)?'<span class="bdg bin">gift</span>':'<span class="bdg bmu">core</span>'}</td><td style="text-align:right">${v.dUS}/d</td><td style="text-align:right">${v.dAU}/d</td><td style="text-align:right;font-weight:600">${+(v.dUS+v.dAU).toFixed(1)}/d</td></tr>`).join('')}</tbody></table></div>
+    </div>
+    ${ovdP.length?`<div class="card" style="border-color:var(--red)"><div class="ct">Overdue payments <span class="bdg bdn">${ovdP.length}</span></div>${ovdP.map(p=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border)"><div><div style="font-size:13px;font-weight:600">${p.po.id} — ${p.type}</div><div style="font-size:12px;color:var(--text2)">${sup(p.po.supId).name} · Due ${fmtD(p.dueDate)}</div></div><div style="text-align:right"><span class="bdg bdn">Overdue</span><div style="font-size:12px;font-weight:600;margin-top:2px">$${fm(p.amount)}</div></div></div>`).join('')}</div>`:''}`;
+}
+
+var invCustomMode = false;
+var invCustomFrom = '';
+var invCustomTo = '';
+
+function setInvPeriod(days){
+  invCustomMode = false;
+  INV_PERIOD = days;
+  syncInventoryVelocity(days);
+}
+
+function toggleInvCustom(){
+  invCustomMode = !invCustomMode;
+  if(!invCustomTo) invCustomTo = new Date().toISOString().split('T')[0];
+  if(!invCustomFrom){
+    const d = new Date(); d.setDate(d.getDate()-14);
+    invCustomFrom = d.toISOString().split('T')[0];
+  }
+  rInventory();
+  // No need to wire listeners — applyInvCustom reads DOM directly on click
+}
+
+function applyInvCustom(){
+  // Read directly from DOM at time of click
+  const f=document.getElementById('inv-from');
+  const t=document.getElementById('inv-to');
+  const from=f?f.value:invCustomFrom;
+  const to=t?t.value:invCustomTo;
+  if(!from||!to){alert('Please select both From and To dates');return;}
+  invCustomFrom=from;
+  invCustomTo=to;
+  const ms=new Date(to)-new Date(from);
+  const days=Math.max(1,Math.round(ms/864e5));
+  INV_PERIOD=days;
+  syncInventoryVelocityCustom(from,to,days);
+}
+
+async function syncInventoryVelocityCustom(from,to,days){
+  // days = number of days between from and to dates
+  // API fetches that many days back from today as approximation
+  // For short windows (1-3d) this is most useful for spike detection
+  try{
+    const r=await fetch('/api/live/shopify?days='+days+'&refresh=1');
+    const d=await r.json();
+    if(!r.ok||d.error)throw new Error(d.error);
+    if(d.velocity_us){for(const[p,v]of Object.entries(d.velocity_us)){INV_DAILY.tw[p]=v}}
+    if(d.velocity_au){for(const[p,v]of Object.entries(d.velocity_au)){INV_DAILY.vi[p]=v}}
+    if(d.au_stock){for(const[p,q]of Object.entries(d.au_stock)){STOCK.vi[p]=q}}
+  }catch(e){console.error('[InvVelocity]',e.message);}
+  rInventory();
+}
+
+async function syncInventoryVelocity(days){
+  INV_PERIOD=days;
+  try{
+    const r=await fetch('/api/live/shopify?days='+days);
+    const d=await r.json();
+    if(!r.ok||d.error)throw new Error(d.error);
+    if(d.velocity_us){for(const[p,v]of Object.entries(d.velocity_us)){INV_DAILY.tw[p]=v}}
+    if(d.velocity_au){for(const[p,v]of Object.entries(d.velocity_au)){INV_DAILY.vi[p]=v}}
+    // Also update AU stock if fresher
+    if(d.au_stock){for(const[p,q]of Object.entries(d.au_stock)){STOCK.vi[p]=q}}
+  }catch(e){console.error('[InvVelocity]',e.message);}
+  rInventory();
+}
+
+function rInventory(){
+  const ib=inbound();const fc=FCS.find(f=>f.id===aFC);
+  const isLive=aFC==='tw'?shConnected:skConnected;
+  // Use INV_DAILY if populated, else fall back to DAILY
+  const hasInvDaily=Object.keys(INV_DAILY.tw).length>0||Object.keys(INV_DAILY.vi).length>0;
+  const velSrc=hasInvDaily?INV_DAILY:DAILY;
+  const dvInv=(fc,p)=>{const s=STOCK[fc]?.[p]??0,d=velSrc[fc]?.[p]??0;return s>0&&d>0?Math.floor(s/d):s===0?null:999};
+  document.getElementById('tab-inventory').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap" id="fctabs">${FCS.map(f=>`<button class="fct${f.id===aFC?' active':''}" data-f="${f.id}">${f.flag} ${f.name}</button>`).join('')}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--text2)">Velocity period:</span>
+        <div style="display:flex;gap:4px;align-items:center">
+          ${[7,14,30].map(d=>`<button class="fct${INV_PERIOD===d&&!invCustomMode?' active':''}" onclick="setInvPeriod(${d})" style="padding:4px 10px;font-size:11px">${d}d</button>`).join('')}
+          <button class="fct${invCustomMode?' active':''}" onclick="toggleInvCustom()" style="padding:4px 10px;font-size:11px">Custom…</button>
+        </div>
+        ${invCustomMode?`<div style="display:flex;align-items:center;gap:6px">
+          <input type="date" id="inv-from" value="${invCustomFrom}" max="${new Date().toISOString().split('T')[0]}" onchange="invCustomFrom=this.value" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg1);color:var(--text1)">
+          <span style="font-size:11px;color:var(--text2)">→</span>
+          <input type="date" id="inv-to" value="${invCustomTo}" max="${new Date().toISOString().split('T')[0]}" onchange="invCustomTo=this.value" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg1);color:var(--text1)">
+          <button class="btn btp" style="font-size:11px;padding:3px 10px" onclick="applyInvCustom()">Apply</button>
+        </div>`:''}
+        <span style="font-size:11px;color:var(--text3)">${invCustomMode&&invCustomFrom&&invCustomTo?invCustomFrom+' → '+invCustomTo+' ('+INV_PERIOD+'d)':INV_PERIOD+'d avg'}</span>
+      </div>
+    </div>
+    ${!isLive?`<div style="background:var(--warnbg);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--warn)">⚠ ${aFC==='tw'?'ShipHero not connected — Tidal Wave showing no data.':'Shopify not connected — Internal WH showing no data.'}</div>`:''}
+    <div class="card"><div class="ct">${fc.flag} ${fc.name} — ${fc.loc}<span class="bdg ${isLive?'bok':'bmu'}">${isLive?(aFC==='tw'?'ShipHero live':'Shopify live'):'not connected'}</span></div>
+    <table class="sf-t"><thead><tr><th>Product</th><th>Type</th><th style="text-align:right">In stock</th><th style="text-align:right">Inbound (POs)</th><th style="text-align:right">Total avail.</th><th style="text-align:right">Daily</th><th style="text-align:right">Days left</th><th style="text-align:right">Status</th></tr></thead><tbody>
+    ${CORE_P.map(p=>{const s=STOCK[aFC]?.[p]??0,b=ib[aFC]?.[p]??0,dl=velSrc[aFC]?.[p]??0,d=dvInv(aFC,p);return`<tr><td style="font-weight:600">${p}</td><td><span class="bdg bmu">core</span></td><td style="text-align:right">${fm(s)}</td><td style="text-align:right;color:var(--blue)">${b?'+'+fm(b):'—'}</td><td style="text-align:right;font-weight:600">${fm(s+b)}</td><td style="text-align:right">${dl?dl+'/d':'—'}</td><td style="text-align:right;font-weight:600">${d===null?'—':d+'d'}</td><td style="text-align:right">${bdg(d)}</td></tr>`}).join('')}
+    <tr><td colspan="8" style="font-size:11px;font-weight:700;color:var(--text2);background:var(--bg2);padding:4px 8px;letter-spacing:.04em">FREE GIFTS / ADD-ONS</td></tr>
+    ${GIFT_P.map(p=>{const s=STOCK[aFC]?.[p]??0,b=ib[aFC]?.[p]??0,dl=velSrc[aFC]?.[p]??0,d=dvInv(aFC,p);return`<tr><td style="font-weight:600">${p}</td><td><span class="bdg bin">gift</span></td><td style="text-align:right">${fm(s)}</td><td style="text-align:right;color:var(--blue)">${b?'+'+fm(b):'—'}</td><td style="text-align:right;font-weight:600">${fm(s+b)}</td><td style="text-align:right">${dl?dl+'/d':'—'}</td><td style="text-align:right;font-weight:600">${d===null?'—':d+'d'}</td><td style="text-align:right">${bdg(d)}</td></tr>`}).join('')}
+    </tbody></table></div>`;
+  document.querySelectorAll('#fctabs .fct').forEach(b=>b.addEventListener('click',()=>{aFC=b.dataset.f;rInventory()}));
+}
+function rBundles(){
+  const ib=inbound();
+  document.getElementById('tab-bundles').innerHTML=`<div class="sn">Bundle fulfillability based on current stock per FC.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px">
+    ${BUNDLES.map(b=>{const comps=Object.entries(b.c).map(([p,q])=>`${q}× ${p}`).join(', ');return`<div class="card" style="margin:0"><div style="font-size:13px;font-weight:600;margin-bottom:2px">${b.n}</div><div style="font-size:11px;color:var(--text2);margin-bottom:4px">SKU: ${b.sku}</div><div style="font-size:20px;font-weight:600;margin-bottom:8px">$${b.p.toFixed(2)}</div><div style="font-size:12px;color:var(--text2);margin-bottom:10px">Components: ${comps}</div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px;letter-spacing:.04em">FULFILLABLE PER FC</div>${FCS.map(f=>{const qty=Math.min(...Object.entries(b.c).map(([p,q])=>Math.floor((STOCK[f.id]?.[p]??0)/q)));const qtyI=Math.min(...Object.entries(b.c).map(([p,q])=>Math.floor(((STOCK[f.id]?.[p]??0)+(ib[f.id]?.[p]??0))/q)));const mD=Math.min(...Object.keys(b.c).map(p=>dv(f.id,p)||999));return`<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:6px 0;border-top:0.5px solid var(--border)"><span>${f.flag} ${f.name}</span><div style="display:flex;align-items:center;gap:5px"><span style="font-weight:600">${qty}</span><span style="color:var(--text2);font-size:11px">+${qtyI-qty} inb.</span>${bdg(mD===999?null:mD)}</div></div>`}).join('')}</div>`}).join('')}</div>`;
+}
+function rForecast(){
+  const gd=gapDays();const ib=inbound();
+  // Use INV_DAILY if set (from inventory period selector), else fall back to DAILY
+  const hasInvDaily=Object.keys(INV_DAILY.tw).length>0||Object.keys(INV_DAILY.vi).length>0;
+  const velSrc=hasInvDaily?INV_DAILY:DAILY;
+  const velPeriodLabel=INV_PERIOD+'d';
+  const dvF=(fc,p)=>dvWithPeriod(fc,p,velSrc);
+  document.getElementById('tab-forecast').innerHTML=`
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+      <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">
+        <div>
+          <div class="fl" style="margin-bottom:4px">Planning window <span class="bdg bmu" style="margin-left:4px">How many days of stock you want to cover</span></div>
+          <select class="sf-sel" id="gsel"><option value="30" ${gMode==='30'?'selected':''}>30 days</option><option value="60" ${gMode==='60'?'selected':''}>60 days</option><option value="90" ${gMode==='90'?'selected':''}>90 days</option><option value="120" ${gMode==='120'?'selected':''}>120 days</option><option value="custom" ${gMode==='custom'?'selected':''}>Custom…</option></select>
+        </div>
+        <div id="cdw" style="display:${gMode==='custom'?'flex':'none'};gap:8px;align-items:flex-end;flex-wrap:wrap"><div><div class="fl" style="margin-bottom:3px">From</div><input type="date" class="fi" id="gfrom" value="${csFrom}" style="width:140px"></div><div><div class="fl" style="margin-bottom:3px">To</div><input type="date" class="fi" id="gto" value="${csTo}" style="width:140px"></div></div>
+        <span class="bdg bmu">${gapLbl()}</span>
+      </div>
+      <div style="font-size:12px;color:var(--text2);background:var(--bg2);border-radius:var(--radius);padding:8px 12px;line-height:1.6">
+        <strong>Velocity basis: ${velPeriodLabel} avg</strong><br>
+        <span style="font-size:11px">Change in Inventory tab → Velocity period</span>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:150px repeat(2,1fr);gap:8px;margin-bottom:4px"><div></div>${FCS.map(f=>`<div style="font-size:11px;font-weight:700;color:var(--text2);text-align:center">${f.flag} ${f.name}</div>`).join('')}</div>
+    <div style="font-size:11px;font-weight:700;color:var(--text2);padding:4px 0;margin-bottom:6px;border-top:0.5px solid var(--border);letter-spacing:.04em">CORE PRODUCTS</div>
+    ${CORE_P.map(p=>`<div style="display:grid;grid-template-columns:150px repeat(2,1fr);gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:13px;font-weight:600">${p}</div>${FCS.map(f=>{const d=dvF(f.id,p);return`<div class="fc-cell ${d===null?'':cc(d)}"><div class="fc-days">${d===null?'—':d}</div><div class="fc-lbl">days</div></div>`}).join('')}</div>`).join('')}
+    <div style="font-size:11px;font-weight:700;color:var(--text2);padding:4px 0;margin:6px 0;border-top:0.5px dashed var(--border2);letter-spacing:.04em">FREE GIFTS / ADD-ONS</div>
+    ${GIFT_P.map(p=>`<div style="display:grid;grid-template-columns:150px repeat(2,1fr);gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:13px;font-weight:600">${p}</div>${FCS.map(f=>{const d=dvF(f.id,p);return`<div class="fc-cell ${d===null?'':cc(d)}"><div class="fc-days">${d===null?'—':d}</div><div class="fc-lbl">days</div></div>`}).join('')}</div>`).join('')}
+    <div class="card" style="margin-top:16px"><div class="ct">Gap to fill — ${gapLbl()} <span class="bdg bmu">at ${velPeriodLabel} velocity · units needed to cover next ${gapLbl()} of sales</span></div>
+      <table class="sf-t"><thead><tr><th>FC</th><th>Product</th><th>Type</th><th style="text-align:right">Days left</th><th style="text-align:right">Need</th><th style="text-align:right">Stock</th><th style="text-align:right">Inbound</th><th style="text-align:right">Gap</th></tr></thead><tbody>
+      ${FCS.flatMap(f=>ALL_TRACK.map(p=>{const d=dvF(f.id,p),dl=velSrc[f.id]?.[p]??0,need=Math.ceil(dl*gd),cur=STOCK[f.id]?.[p]??0,inb=ib[f.id]?.[p]??0,gap=Math.max(0,need-cur-inb);return{f,p,d,need,cur,inb,gap,gift:GIFT_P.includes(p)}})).filter(r=>r.dl!==0||r.cur>0).sort((a,b)=>(a.d||999)-(b.d||999)).map(r=>`<tr><td>${r.f.flag} ${r.f.name}</td><td style="font-weight:600">${r.p}</td><td><span class="bdg ${r.gift?'bin':'bmu'}">${r.gift?'gift':'core'}</span></td><td style="text-align:right">${bdg(r.d)}</td><td style="text-align:right">${r.need||'—'}</td><td style="text-align:right">${r.cur}</td><td style="text-align:right;color:var(--blue)">${r.inb?'+'+fm(r.inb):'—'}</td><td style="text-align:right;font-weight:600;${r.gap?'color:var(--red)':''}">${r.gap?'+'+fm(r.gap):'✓'}</td></tr>`).join('')}
+      </tbody></table></div>`;
+  document.getElementById('gsel').addEventListener('change',e=>{gMode=e.target.value;document.getElementById('cdw').style.display=gMode==='custom'?'flex':'none';rForecast()});
+  const gf=document.getElementById('gfrom'),gt=document.getElementById('gto');
+  if(gf)gf.addEventListener('change',e=>{csFrom=e.target.value;if(csFrom&&csTo)rForecast()});
+  if(gt)gt.addEventListener('change',e=>{csTo=e.target.value;if(csFrom&&csTo)rForecast()});
+}
+function uReorder(){
+  const el=document.getElementById('rr');if(!el)return;
+  const hasData=Object.keys(AVG_PRICE).length>0;
+  const hasCogs=Object.keys(COGS).length>0;
+  const dailyRev=DAILY_REV||0;
+  const periodRev=dailyRev*VELOCITY_PERIOD;
+  const targetDailyRev=tRev/tDays;
+  const multiplier=dailyRev>0?targetDailyRev/dailyRev:1;
+  const allRows=ALL_TRACK.map(p=>{
+    const dlUS=DAILY.tw?.[p]??0,dlAU=DAILY.vi?.[p]??0,dlTot=dlUS+dlAU;
+    const avgP=AVG_PRICE[p]>0?AVG_PRICE[p]:(PRICES[p]??0);
+    const costP=COGS[p]??0;
+    const crUS=STOCK.tw?.[p]??0,crAU=STOCK.vi?.[p]??0,crTot=crUS+crAU;
+    const unitsSold=UNITS_SOLD_DATA[p]??0;
+    const nd=Math.ceil(dlTot*multiplier*tDays);
+    const tb=Math.max(0,nd-crTot);
+    const cg=tb*costP;
+    const gift=GIFT_P.includes(p);
+    const dailyRevShare=dlTot*avgP;
+    return{p,dlUS,dlAU,dlTot,avgP,costP,nd,crTot,crUS,crAU,tb,cg,gift,dailyRevShare,unitsSold}
+  });
+  const totalCogs=allRows.reduce((s,r)=>s+r.cg,0);
+  const projectedRev=dailyRev*tDays;
+  const multPct=((multiplier-1)*100).toFixed(0);
+  const multLabel=multiplier>1?`+${multPct}% scale-up needed`:multiplier<0.99?`${multPct}% scale-down`:'On track';
+  el.innerHTML=`
+    ${!hasData?'<div style="background:var(--warnbg);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--warn)">⚠ Connect Shopify to load real data.</div>':''}
+    <div class="g4" style="margin-bottom:14px">
+      <div class="mc"><div class="ml">Actual daily revenue <span class="bdg bmu">${VELOCITY_PERIOD}d avg</span></div><div class="mv">$${fm(dailyRev)}</div><div class="ms">$${fm(periodRev)} over ${VELOCITY_PERIOD} days</div></div>
+      <div class="mc"><div class="ml">Projected over ${tDays}d</div><div class="mv">$${fm(projectedRev)}</div><div class="ms">At current velocity</div></div>
+      <div class="mc"><div class="ml">Revenue target</div><div class="mv">$${fm(tRev)}</div><div class="ms" style="${multiplier>1?`color:var(--warn)`:`color:var(--green)`}">${multLabel}</div></div>
+      <div class="mc"><div class="ml">Est. COGS to order</div><div class="mv">$${fm(totalCogs)}</div><div class="ms">${hasCogs?'From Shopify cost fields':'Add costs in Shopify'}</div></div>
+    </div>
+    <div class="card">
+      <div class="ct">Units needed to hit $${fm(tRev)} over ${tDays} days <span class="bdg ${multiplier>1.05?'bwn':multiplier<0.95?'bin':'bok'}">${multLabel}</span></div>
+      <table class="sf-t"><thead><tr>
+        <th>Product</th><th>Type</th>
+        <th style="text-align:right">US stock</th><th style="text-align:right">AU stock</th>
+        <th style="text-align:right">US /d</th><th style="text-align:right">AU /d</th>
+        <th style="text-align:right">Sold (${VELOCITY_PERIOD}d)</th>
+        <th style="text-align:right">Avg price</th><th style="text-align:right">Unit cost</th>
+        <th style="text-align:right">Daily rev</th>
+        <th style="text-align:right">Need (${tDays}d)</th>
+        <th style="text-align:right">To buy</th><th style="text-align:right">COGS</th>
+      </tr></thead><tbody>
+      ${allRows.map(r=>`<tr>
+        <td style="font-weight:600">${r.p}</td>
+        <td><span class="bdg ${r.gift?'bin':'bmu'}">${r.gift?'gift':'core'}</span></td>
+        <td style="text-align:right">${fm(r.crUS)}</td>
+        <td style="text-align:right">${fm(r.crAU)}</td>
+        <td style="text-align:right">${r.dlUS?r.dlUS+'/d':'—'}</td>
+        <td style="text-align:right">${r.dlAU?r.dlAU+'/d':'—'}</td>
+        <td style="text-align:right">${fm(r.unitsSold)}</td>
+        <td style="text-align:right">${r.avgP?'$'+r.avgP.toFixed(2):'—'}</td>
+        <td style="text-align:right">${r.costP?'$'+r.costP.toFixed(2):'—'}</td>
+        <td style="text-align:right">$${fm(r.dailyRevShare)}</td>
+        <td style="text-align:right;font-weight:600">${fm(r.nd)||'—'}</td>
+        <td style="text-align:right;font-weight:600;${r.tb?'color:var(--blue)':''}">${r.tb?'+'+fm(r.tb):'✓'}</td>
+        <td style="text-align:right">${r.tb&&r.costP?'$'+fm(r.cg):'—'}</td>
+      </tr>`).join('')}
+      </tbody></table>
+    </div>`;
+}
+function rReorder(){
+  document.getElementById('tab-reorder').innerHTML=`
+    <div class="card" style="margin-bottom:14px">
+      <div class="ct">Revenue target</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px">
+        <div><div style="font-size:13px;color:var(--text2);margin-bottom:6px">Target revenue ($)</div><input class="ri" type="number" id="trv" value="${tRev}" min="1000" step="1000"></div>
+        <div><div style="font-size:13px;color:var(--text2);margin-bottom:6px">Over how many days</div><input class="ri" type="number" id="tdy" value="${tDays}" min="7" step="7"></div>
+        <div><div style="font-size:13px;color:var(--text2);margin-bottom:6px">Velocity period</div>
+          <select class="sf-sel" id="vel-period" style="width:100%;font-size:16px;padding:6px 0;border:none;border-bottom:1px solid var(--border2);background:none">
+            <option value="7" ${VELOCITY_PERIOD===7?'selected':''}>Last 7 days</option>
+            <option value="14" ${VELOCITY_PERIOD===14?'selected':''}>Last 14 days</option>
+            <option value="30" ${VELOCITY_PERIOD===30?'selected':''}>Last 30 days</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div id="rr"></div>`;
+  uReorder();
+  document.getElementById('trv').addEventListener('input',e=>{tRev=parseInt(e.target.value)||50000;uReorder()});
+  document.getElementById('tdy').addEventListener('input',e=>{tDays=parseInt(e.target.value)||60;uReorder()});
+  document.getElementById('vel-period').addEventListener('change',async e=>{
+    VELOCITY_PERIOD=parseInt(e.target.value);
+    const btn=document.getElementById('sk-btn');
+    await syncShopify(btn);
+  });
+}
+function rPO(){
+  const prods=[...new Set(POS.flatMap(p=>p.lines.map(l=>l.p)))].sort();
+  let filt=POS.filter(po=>{if(pof.sup&&po.supId!==pof.sup)return false;if(pof.fc&&po.fc!==pof.fc)return false;if(pof.st&&po.status!==pof.st)return false;if(pof.df&&po.exp&&po.exp<pof.df)return false;if(pof.dt&&po.exp&&po.exp>pof.dt)return false;if(pof.prods.length&&!pof.prods.some(fp=>po.lines.some(l=>l.p===fp)))return false;return true});
+  const act=filt.filter(p=>p.status!=='Received'),rec=filt.filter(p=>p.status==='Received');
+  const anyF=pof.sup||pof.fc||pof.st||pof.df||pof.dt||pof.prods.length;
+  document.getElementById('tab-po').innerHTML=`
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <div class="g4" style="margin:0;flex:1"><div class="mc"><div class="ml">Open POs</div><div class="mv">${POS.filter(p=>p.status!=='Received').length}</div></div><div class="mc"><div class="ml">Overdue POs</div><div class="mv" style="${POS.filter(p=>od(p)).length?'color:var(--red)':''}">${POS.filter(p=>od(p)).length}</div></div><div class="mc"><div class="ml">Overdue payments</div><div class="mv" style="${overdueP().length?'color:var(--red)':''}">${overdueP().length}</div></div><div class="mc"><div class="ml">Total owed</div><div class="mv" style="${POS.reduce((s,po)=>s+payOwed(po),0)?'color:var(--warn)':''}">$${fm(POS.reduce((s,po)=>s+payOwed(po),0))}</div></div></div>
+      <button class="btn btp" onclick="openPO(null)" style="white-space:nowrap;margin-top:4px">+ New PO</button>
+    </div>
+    <div class="fbar">
+      <div class="fg"><div class="fl">Supplier</div><select class="fi" onchange="pof.sup=this.value;rPO()"><option value="">All</option>${SUPPLIERS.map(s=>`<option value="${s.id}" ${pof.sup===s.id?'selected':''}>${s.name}</option>`).join('')}</select></div>
+      <div class="fg"><div class="fl">FC</div><select class="fi" onchange="pof.fc=this.value;rPO()"><option value="">All</option>${FCS.map(f=>`<option value="${f.id}" ${pof.fc===f.id?'selected':''}>${f.flag} ${f.name}</option>`).join('')}</select></div>
+      <div class="fg"><div class="fl">Status</div><select class="fi" onchange="pof.st=this.value;rPO()"><option value="">All</option>${Object.keys(SC).map(s=>`<option ${pof.st===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="fg"><div class="fl">Exp. from</div><input type="date" class="fi" value="${pof.df}" onchange="pof.df=this.value;rPO()"></div>
+      <div class="fg"><div class="fl">Exp. to</div><input type="date" class="fi" value="${pof.dt}" onchange="pof.dt=this.value;rPO()"></div>
+      ${anyF?`<button class="btn bts" onclick="pof={sup:'',fc:'',st:'',df:'',dt:'',prods:[]};rPO()">✕ Clear</button>`:''}
+    </div>
+    <div class="card">
+      <div class="ct">Active POs ${anyF?`<span class="bdg bin">${act.length} shown</span>`:''}</div>
+      <table class="sf-t"><thead><tr><th>PO</th><th>Supplier</th><th>FC</th><th>Status</th><th>Expected</th><th>Products</th><th>Payments</th><th></th></tr></thead><tbody>
+      ${act.length?act.map(po=>{const s=sup(po.supId);const paidC=po.payments.filter(p=>p.status==='Paid').length;const ovdC=po.payments.filter(p=>p.status==='Overdue').length;return`<tr><td style="font-weight:600">${po.id}</td><td><div style="font-weight:600">${s.name}</div><div style="font-size:11px;color:var(--text2)">${s.currency}</div></td><td>${fcn(po.fc).flag} ${fcn(po.fc).name}</td><td><div style="position:relative;display:inline-block">${sPill(po)}</div><div class="prog-w"><div class="prog-b" style="width:${SC[po.status]?.pr??0}%"></div></div></td><td>${od(po)?`<span class="ov">⚠ Overdue<br></span>`:''}<span style="font-size:12px">${po.exp||'—'}</span></td><td style="font-size:12px">${po.lines.slice(0,2).map(l=>`<div>${l.o}× ${l.p}</div>`).join('')}${po.lines.length>2?`<div style="color:var(--text2)">+${po.lines.length-2} more</div>`:''}</td><td><div style="font-size:12px">${paidC}/${po.payments.length} paid</div>${ovdC?`<span class="bdg bdn" style="margin-top:3px">${ovdC} overdue</span>`:''}<div style="font-size:11px;color:var(--text2)">$${fm(payOwed(po))} owed</div></td><td><div style="display:flex;gap:4px;flex-wrap:wrap"><button class="btn bts" onclick="openPO('${po.id}')">Edit</button><button class="btn bts" onclick="openPayDetail('${po.id}')">Payments</button><button class="btd" onclick="confirmDeletePO('${po.id}')">Delete</button></div></td></tr>`}).join(''):`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text2)">No active POs${anyF?' match filters':''}. <button class="btn bts" onclick="openPO(null)">Create one</button></td></tr>`}
+      </tbody></table>
+    </div>
+    <div class="card">
+      <div class="ct">Completed POs</div>
+      <table class="sf-t"><thead><tr><th>PO</th><th>Supplier</th><th>FC</th><th>Status</th><th>Delivered</th><th>Value</th><th>Payment</th><th></th></tr></thead><tbody>
+      ${rec.length?rec.map(po=>`<tr><td style="font-weight:600">${po.id}</td><td>${sup(po.supId).name}</td><td>${fcn(po.fc).flag} ${fcn(po.fc).name}</td><td><div style="position:relative;display:inline-block">${sPill(po)}</div></td><td style="font-size:12px">${po.exp}</td><td style="font-size:12px;font-weight:600">$${fm(poTotal(po))}</td><td><span class="bdg ${po.payments.every(p=>p.status==='Paid')?'bok':'bwn'}">${po.payments.filter(p=>p.status==='Paid').length}/${po.payments.length} paid</span></td><td><div style="display:flex;gap:4px"><button class="btn bts" onclick="openPO('${po.id}')">Edit</button><button class="btn bts" onclick="openPayDetail('${po.id}')">Payments</button><button class="btd" onclick="confirmDeletePO('${po.id}')">Delete</button></div></td></tr>`).join(''):`<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--text2)">No completed POs</td></tr>`}
+      </tbody></table>
+    </div>`;
+}
+function rSuppliers(){
+  const poCount=id=>POS.filter(p=>p.supId===id).length;
+  document.getElementById('tab-suppliers').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div><div style="font-size:14px;font-weight:600">Saved suppliers</div></div><button class="btn btp" onclick="openSupplier(null)">+ Add supplier</button></div>
+    ${SUPPLIERS.map(s=>`<div class="sup-card"><div class="sup-av">${s.name.slice(0,2).toUpperCase()}</div><div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px"><span style="font-size:14px;font-weight:600">${s.name}</span><span class="bdg bmu">${s.currency}</span><span class="bdg bmu">${poCount(s.id)} PO${poCount(s.id)!==1?'s':''}</span></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px 16px;font-size:12px;color:var(--text2)">${s.contact?`<div>👤 ${s.contact}</div>`:''} ${s.email?`<div>✉ ${s.email}</div>`:''} ${s.phone?`<div>📞 ${s.phone}</div>`:''} ${s.addr?`<div>📍 ${s.addr}</div>`:''}<div>💳 ${s.payTerms}</div>${s.bankName?`<div>🏦 ${s.bankName} ${s.bankAcct}</div>`:''}</div>${s.notes?`<div style="font-size:12px;color:var(--text2);margin-top:6px;padding:6px 10px;background:var(--bg2);border-radius:6px">${s.notes}</div>`:''}</div><div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end"><button class="btn bts" onclick="openSupplier('${s.id}')">Edit</button><button class="btn bts" onclick="openPO(null)">New PO</button></div></div>`).join('')}`;
+}
+function rPayments(){
+  const all=POS.flatMap(po=>po.payments.map(p=>({...p,po})));const overdue=all.filter(p=>p.status==='Overdue');const upcoming=all.filter(p=>p.status==='Unpaid'&&p.dueDate&&p.dueDate>TODAY).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));const paid=all.filter(p=>p.status==='Paid');
+  document.getElementById('tab-payments').innerHTML=`
+    <div class="g4"><div class="mc"><div class="ml">Total paid</div><div class="mv" style="color:var(--green)">$${fm(paid.reduce((s,p)=>s+p.amount,0))}</div></div><div class="mc"><div class="ml">Outstanding</div><div class="mv" style="color:var(--warn)">$${fm(all.filter(p=>p.status!=='Paid').reduce((s,p)=>s+p.amount,0))}</div></div><div class="mc"><div class="ml">Overdue</div><div class="mv" style="${overdue.length?'color:var(--red)':''}">$${fm(overdue.reduce((s,p)=>s+p.amount,0))}</div></div><div class="mc"><div class="ml">No POs yet</div><div class="mv" style="color:var(--text3)">—</div></div></div>
+    ${overdue.length?`<div class="card" style="border-color:var(--red)"><div class="ct">Overdue <span class="bdg bdn">${overdue.length}</span></div><table class="sf-t"><thead><tr><th>PO</th><th>Type</th><th>Supplier</th><th>Due</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>${overdue.map(p=>`<tr><td style="font-weight:600">${p.po.id}</td><td>${p.type}</td><td>${sup(p.po.supId).name}</td><td><span class="ov">${fmtD(p.dueDate)}</span></td><td style="text-align:right;font-weight:600">$${fm(p.amount)}</td><td><button class="btn bts" style="color:var(--green);border-color:var(--green)" onclick="markPaid('${p.po.id}','${p.id}');rPayments()">Mark paid</button></td></tr>`).join('')}</tbody></table></div>`:''}
+    <div class="card"><div class="ct">Upcoming payments</div>${upcoming.length?`<table class="sf-t"><thead><tr><th>PO</th><th>Type</th><th>Supplier</th><th>Due</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>${upcoming.map(p=>`<tr><td style="font-weight:600">${p.po.id}</td><td>${p.type}</td><td>${sup(p.po.supId).name}</td><td style="font-size:12px">${fmtD(p.dueDate)}</td><td style="text-align:right;font-weight:600">$${fm(p.amount)}</td><td><button class="btn bts" onclick="openPayDetail('${p.po.id}')">View PO</button></td></tr>`).join('')}</tbody></table>`:'<div class="sn">No upcoming payments.</div>'}</div>
+    <div class="card"><div class="ct">Payment history</div><table class="sf-t"><thead><tr><th>PO</th><th>Type</th><th>Supplier</th><th>Paid on</th><th style="text-align:right">Amount</th></tr></thead><tbody>${paid.length?paid.sort((a,b)=>(b.paidDate||'').localeCompare(a.paidDate||'')).map(p=>`<tr><td style="font-weight:600">${p.po.id}</td><td>${p.type}</td><td>${sup(p.po.supId).name}</td><td style="font-size:12px">${fmtD(p.paidDate)}</td><td style="text-align:right;font-weight:600">$${fm(p.amount)}</td></tr>`).join(''):'<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--text2)">No payments recorded</td></tr>'}</tbody></table></div>`;
+}
+
+// ─── PACKAGING PROJECTION ────────────────────────────────────────────────────
+
+const PKG_CAPACITY={deodorant:6,bottle:2,scalp_scrubber:3,body_buffer:6,cooling_wipes:3};
+
+const SKU_TO_CATEGORY={
+  'Dc&c-MANLY':'deodorant',
+  'SSC&C':'deodorant',
+  'BWc&c-MANLY':'bottle',
+  'SHAc&c-MANLY':'bottle',
+  'CONc&c-MANLY':'bottle',
+  'SCALP-MANLY':'scalp_scrubber',
+  'BB-MANLY':'body_buffer',
+  'CW-MANLY':'cooling_wipes',
+};
+
+const BUNDLE_EXPAND={
+  'BCKc&c': {'BWc&c-MANLY':1,'Dc&c-MANLY':1},
+  'SEC&C':  {'BWc&c-MANLY':1,'Dc&c-MANLY':1,'SHAc&c-MANLY':1,'CONc&c-MANLY':1},
+  'HCKc&c': {'SHAc&c-MANLY':1,'CONc&c-MANLY':1},
+  'STKc&c': {'BWc&c-MANLY':1,'SHAc&c-MANLY':1,'CONc&c-MANLY':1},
+  'BPc&c':  {'SSC&C':1,'BB-MANLY':1},
+  'V2FREEGIFTS': {'BB-MANLY':1,'SCALP-MANLY':1,'CW-MANLY':1},
+  'SE':     {'BWc&c-MANLY':1,'Dc&c-MANLY':1,'SHAc&c-MANLY':1,'CONc&c-MANLY':1},
+  'SE2':    {'BWc&c-MANLY':1,'Dc&c-MANLY':1,'SHAc&c-MANLY':1,'CONc&c-MANLY':1},
+  'REPAIR': {'SHAc&c-MANLY':1,'CONc&c-MANLY':1},
+};
+
+function calcPackaging(lineItems, halfMailerStock){
+  const skuQtys={};
+  for(const item of lineItems){
+    const sku=item.sku,qty=item.quantity||1;
+    if(!sku||!qty)continue;
+    if(BUNDLE_EXPAND[sku]){
+      for(const[cs,cq]of Object.entries(BUNDLE_EXPAND[sku])){
+        skuQtys[cs]=(skuQtys[cs]||0)+cq*qty;
+      }
+    } else {
+      skuQtys[sku]=(skuQtys[sku]||0)+qty;
+    }
+  }
+
+  let deo=0,bottle=0,gift=0;
+  for(const[sku,qty]of Object.entries(skuQtys)){
+    const cat=SKU_TO_CATEGORY[sku];
+    if(cat==='deodorant')deo+=qty;
+    else if(cat==='bottle')bottle+=qty;
+    else if(['scalp_scrubber','body_buffer','cooling_wipes'].includes(cat))gift+=qty;
+  }
+
+  let halfMailers=0,normalMailers=0;
+  const isLarge=(deo>=4||bottle>=4);
+
+  if(isLarge){
+    // Bottles: floor/4 standards, remainder to half
+    const bottleStds=Math.floor(bottle/4);
+    const bottleRem=bottle%4; // remaining bottles in partial standard
+    normalMailers+=bottleStds;
+    if(bottleRem>0)halfMailers++;
+
+    // Deos stack on top of bottles — each bottle standard also holds 4 deos
+    const deoCapacity=bottleStds*4;
+    const remainingDeo=Math.max(0,deo-deoCapacity);
+    if(remainingDeo>0){
+      normalMailers+=Math.floor(remainingDeo/4);
+      if(remainingDeo%4>0)halfMailers++;
+    }
+    // Deo-only large orders
+    if(bottle===0&&deo>=4){
+      normalMailers+=Math.floor(deo/4);
+      if(deo%4>0)halfMailers++;
+    }
+
+    // Gifts: fit into the partial (half) bottle standard first if there is one
+    // If bottle standard isn't full (bottleRem>0), gifts can share that half mailer
+    // We treat the partial bottle standard as having room for gifts alongside the bottles
+    let remainingGift=gift;
+    if(bottleRem>0&&gift>0){
+      // The half-mailer has some bottles in it already — gifts can share up to 9 gifts
+      const giftCapacityInHalf=9;
+      const giftsInHalf=Math.min(remainingGift,giftCapacityInHalf);
+      remainingGift-=giftsInHalf;
+      // No extra half mailer needed for gifts that fit here — already counted above
+    }
+    // Overflow gifts that don't fit need their own mailer(s)
+    if(remainingGift>0){
+      normalMailers+=Math.floor(remainingGift/18);
+      const gRem=remainingGift%18;
+      if(gRem>0){if(gRem<=3)halfMailers++;else normalMailers++;}
+    }
+  } else {
+    // Small order — pack everything together
+    const mainItems=deo+bottle;
+    if(mainItems===0){
+      if(gift===0)return{deo,bottle,gift,skuQtys,halfMailers:0,normalMailers:0,carton4:0,carton2:0,standalone:0};
+      if(gift<=3)halfMailers++;
+      else{normalMailers+=Math.floor(gift/18);const r=gift%18;if(r>0){if(r<=3)halfMailers++;else normalMailers++;}}
+    } else if(mainItems<=2&&gift===0){
+      halfMailers++;
+    } else {
+      normalMailers++;
+    }
+  }
+
+  // 2 half mailers → upgrade to 1 standard
+  normalMailers+=Math.floor(halfMailers/2);
+  halfMailers=halfMailers%2;
+
+  // Half mailer stock fallback
+  if(halfMailerStock!==undefined&&halfMailerStock!==null&&halfMailerStock<halfMailers){
+    normalMailers+=halfMailers-halfMailerStock;
+    halfMailers=halfMailerStock;
+  }
+
+  // Carton logic: half mailer counts as 1 effective slot
+  const effSlots=normalMailers+(halfMailers>0?1:0);
+  let carton4=0,carton2=0,standalone=0;
+  if(effSlots>=4){
+    carton4=Math.floor(effSlots/4);
+    const rem=effSlots%4;
+    if(rem>=3)carton4++;
+    else if(rem===2)carton2=1;
+    else if(rem===1)standalone=1;
+  } else if(effSlots===3){
+    carton4=1;
+  } else if(effSlots===2){
+    carton2=1;
+  } else if(effSlots===1){
+    standalone=1;
+  }
+
+  return{deo,bottle,gift,skuQtys,halfMailers,normalMailers,carton4,carton2,standalone};
+}
+
+// Test helper (remove in prod)
+function testPackaging(){
+  const tests=[
+    {label:'2deo+2btl+6gifts→1std',l:[{sku:'Dc&c-MANLY',quantity:2},{sku:'BWc&c-MANLY',quantity:2},{sku:'SCALP-MANLY',quantity:2},{sku:'BB-MANLY',quantity:2},{sku:'CW-MANLY',quantity:2}],exp:{h:0,n:1}},
+    {label:'9gifts→half',l:[{sku:'SCALP-MANLY',quantity:3},{sku:'BB-MANLY',quantity:3},{sku:'CW-MANLY',quantity:3}],exp:{h:1,n:0}},
+    {label:'1deo+1btl→half',l:[{sku:'Dc&c-MANLY',quantity:1},{sku:'BWc&c-MANLY',quantity:1}],exp:{h:1,n:0}},
+    {label:'4deo+4btl+12gifts→3std',l:[{sku:'Dc&c-MANLY',quantity:4},{sku:'BWc&c-MANLY',quantity:4},{sku:'SCALP-MANLY',quantity:4},{sku:'BB-MANLY',quantity:4},{sku:'CW-MANLY',quantity:4}],exp:{h:0,n:3}},
+    {label:'4deo+12btl→4std+quad',l:[{sku:'Dc&c-MANLY',quantity:4},{sku:'BWc&c-MANLY',quantity:12}],exp:{h:0,n:4}},
+    {label:'5btl→1std+1half',l:[{sku:'BWc&c-MANLY',quantity:5}],exp:{h:1,n:1}},
+    {label:'7btl→1std+1half',l:[{sku:'BWc&c-MANLY',quantity:7}],exp:{h:1,n:1}},
+    {label:'4btl→1std',l:[{sku:'BWc&c-MANLY',quantity:4}],exp:{h:0,n:1}},
+    {label:'2btl→1half',l:[{sku:'BWc&c-MANLY',quantity:2}],exp:{h:1,n:0}},
+    {label:'1deo+3btl→1std',l:[{sku:'Dc&c-MANLY',quantity:1},{sku:'BWc&c-MANLY',quantity:3}],exp:{h:0,n:1}},
+    {label:'1deo→half',l:[{sku:'Dc&c-MANLY',quantity:1}],exp:{h:1,n:0}},
+  ];
+  let pass=0,fail=0;
+  for(const t of tests){
+    const r=calcPackaging(t.l);
+    const ok=r.halfMailers===t.exp.h&&r.normalMailers===t.exp.n;
+    if(ok)pass++;else{fail++;console.log('FAIL',t.label,'got h='+r.halfMailers+' n='+r.normalMailers,'exp h='+t.exp.h+' n='+t.exp.n);}
+  }
+  console.log('Tests: '+pass+' pass, '+fail+' fail');
+}
+
+let pkgOrders=[];
+let pkgTargetRev=1000000;
+let pkgLoading=false;
+let pkgPeriod=7;
+
+async function loadPackagingOrders(){
+  pkgLoading=true;rPackaging();
+  try{
+    const r=await fetch('/api/live/packaging?days='+pkgPeriod);
+    const d=await r.json();
+    if(!r.ok||d.error)throw new Error(d.error||'Packaging error');
+    pkgOrders=d.orders.map(o=>({...o,...calcPackaging(o.line_items)}));
+  }catch(e){console.error('[Packaging]',e.message);}
+  pkgLoading=false;rPackaging();
+}
+
+
+function pkgRevenueCalc(){
+  const rev=pkgTargetRev||0;
+  if(!rev||pkgOrders.length===0)return'';
+  const dailyRev=DAILY_REV>0?DAILY_REV:0;
+  if(dailyRev===0)return'<div style="color:var(--warn);font-size:13px;padding:10px 0">⚠ Connect Shopify to get revenue data.</div>';
+  const daysNeeded=rev/dailyRev;
+  const n=pkgOrders.length;
+  const avgHalf=pkgOrders.reduce((s,o)=>s+(o.halfMailers||0),0)/n;
+  const avgNormal=pkgOrders.reduce((s,o)=>s+(o.normalMailers||0),0)/n;
+  const avgC4=pkgOrders.reduce((s,o)=>s+(o.carton4||0),0)/n;
+  const avgC2=pkgOrders.reduce((s,o)=>s+(o.carton2||0),0)/n;
+  const dailyOrders=DAILY_ORDERS>0?DAILY_ORDERS:(n/pkgPeriod);
+  const avgOrderValue=dailyOrders>0?dailyRev/dailyOrders:0;
+  const ordersNeeded=avgOrderValue>0?Math.round(rev/avgOrderValue):0;
+  const projHalf=Math.round(avgHalf*ordersNeeded);
+  const projNormal=Math.round(avgNormal*ordersNeeded);
+  const projC4=Math.round(avgC4*ordersNeeded);
+  const projC2=Math.round(avgC2*ordersNeeded);
+  return`<div style="font-size:12px;color:var(--text2);margin-bottom:12px">
+    $${fm(Math.round(dailyRev))}/day · ~${Math.round(daysNeeded)} days · ~${fm(ordersNeeded)} orders
+    <span style="margin-left:8px;color:var(--text3)">Based on ${pkgPeriod}-day avg · ${n} orders sampled</span>
+  </div>
+  <div class="g4">
+    <div class="mc"><div class="ml">Half Mailer Boxes</div><div class="mv">${fm(projHalf)}</div><div class="ms">${daysNeeded>0?(projHalf/daysNeeded).toFixed(1)+'/d':''}</div></div>
+    <div class="mc"><div class="ml">Standard Mailers</div><div class="mv">${fm(projNormal)}</div><div class="ms">${daysNeeded>0?(projNormal/daysNeeded).toFixed(1)+'/d':''}</div></div>
+    <div class="mc"><div class="ml">Double Cartons (2×)</div><div class="mv">${fm(projC2)}</div><div class="ms">${daysNeeded>0?(projC2/daysNeeded).toFixed(1)+'/d':''}</div></div>
+    <div class="mc"><div class="ml">Quad Cartons (4×)</div><div class="mv">${fm(projC4)}</div><div class="ms">${daysNeeded>0?(projC4/daysNeeded).toFixed(1)+'/d':''}</div></div>
+  </div>`;
+}
+
+function updatePkgRevCalc(){
+  const el=document.getElementById('pkg-rev-results');
+  if(el)el.innerHTML=pkgRevenueCalc();
+}
+
+
+function pkgOrderSizeBreakdown(){
+  const dist={};
+  for(const o of pkgOrders){
+    const k=o.normalMailers===0&&o.halfMailers===1?'Half only':
+            o.normalMailers===1&&o.halfMailers===0?'1 standard':
+            o.normalMailers===1&&o.halfMailers===1?'1 std + half':
+            o.normalMailers>1?o.normalMailers+' standard'+(o.halfMailers?' + half':''):'Other';
+    dist[k]=(dist[k]||0)+1;
+  }
+  let rows='';
+  for(const[k,v]of Object.entries(dist).sort((a,b)=>b[1]-a[1])){
+    rows+=`<tr><td>${k}</td><td style="text-align:right;font-weight:600">${v}</td><td style="text-align:right">${(v/pkgOrders.length*100).toFixed(1)}%</td></tr>`;
+  }
+  return `<table class="sf-t"><thead><tr><th>Packaging</th><th style="text-align:right">Orders</th><th style="text-align:right">%</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function rPackaging(){
+  const el=document.getElementById('tab-packaging');if(!el)return;
+  const totals={halfMailers:0,normalMailers:0,carton4:0,carton2:0,standalone:0};
+  for(const o of pkgOrders){
+    totals.halfMailers+=o.halfMailers||0;
+    totals.normalMailers+=o.normalMailers||0;
+    totals.carton4+=o.carton4||0;
+    totals.carton2+=o.carton2||0;
+    totals.standalone+=o.standalone||0;
+  }
+  el.innerHTML=`
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:2px">📦 Packaging Projection</div>
+        <div class="sn" style="margin:0">Based on ${pkgPeriod}-day Shopify orders. Calculated per individual order.</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select class="sf-sel" id="pkg-period">
+          <option value="7" ${pkgPeriod===7?'selected':''}>Last 7 days</option>
+          <option value="14" ${pkgPeriod===14?'selected':''}>Last 14 days</option>
+          <option value="30" ${pkgPeriod===30?'selected':''}>Last 30 days</option>
+        </select>
+        <button class="btn btp" onclick="loadPackagingOrders()" ${pkgLoading?'disabled':''}>
+          ${pkgLoading?'⟳ Loading…':'↻ Refresh'}
+        </button>
+      </div>
+    </div>
+    ${pkgOrders.length===0&&!pkgLoading?`<div style="background:var(--bg2);border-radius:var(--radius-lg);padding:40px;text-align:center;color:var(--text2)">
+      <div style="font-size:32px;margin-bottom:12px">📦</div>
+      <div style="font-size:14px;font-weight:600;margin-bottom:6px">No data loaded</div>
+      <div style="font-size:13px;margin-bottom:16px">Click Refresh to calculate packaging from Shopify orders</div>
+      <button class="btn btp" onclick="loadPackagingOrders()">Load packaging data</button>
+    </div>`:''}
+    ${pkgLoading?`<div style="text-align:center;padding:40px;color:var(--text2)">⟳ Calculating packaging…</div>`:''}
+    ${pkgOrders.length>0?`
+    <div class="g4" style="margin-bottom:16px">
+      <div class="mc"><div class="ml">Orders analysed</div><div class="mv">${pkgOrders.length}</div><div class="ms">Last ${pkgPeriod} days</div></div>
+      <div class="mc"><div class="ml">Half Mailer Boxes</div><div class="mv">${fm(totals.halfMailers)}</div><div class="ms">${(totals.halfMailers/pkgPeriod).toFixed(1)}/d avg</div></div>
+      <div class="mc"><div class="ml">Standard Mailers</div><div class="mv">${fm(totals.normalMailers)}</div><div class="ms">${(totals.normalMailers/pkgPeriod).toFixed(1)}/d avg</div></div>
+      <div class="mc"><div class="ml">Cartons needed</div><div class="mv">${fm(totals.carton4+totals.carton2)}</div><div class="ms">${fm(totals.carton4)} quad · ${fm(totals.carton2)} double</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+      <div class="card" style="margin:0">
+        <div class="ct">Packaging summary — last ${pkgPeriod} days</div>
+        <table class="sf-t"><thead><tr><th>Box type</th><th style="text-align:right">Qty</th><th style="text-align:right">Per day</th></tr></thead>
+        <tbody>
+          <tr><td>🗃 Half Mailer Box</td><td style="text-align:right;font-weight:600">${fm(totals.halfMailers)}</td><td style="text-align:right">${(totals.halfMailers/pkgPeriod).toFixed(1)}/d</td></tr>
+          <tr><td>📦 Standard Mailer</td><td style="text-align:right;font-weight:600">${fm(totals.normalMailers)}</td><td style="text-align:right">${(totals.normalMailers/pkgPeriod).toFixed(1)}/d</td></tr>
+          <tr><td>📫 Double Carton (2× std)</td><td style="text-align:right;font-weight:600">${fm(totals.carton2)}</td><td style="text-align:right">${(totals.carton2/pkgPeriod).toFixed(1)}/d</td></tr>
+          <tr><td>🏗 Quad Carton (4× std)</td><td style="text-align:right;font-weight:600">${fm(totals.carton4)}</td><td style="text-align:right">${(totals.carton4/pkgPeriod).toFixed(1)}/d</td></tr>
+        </tbody></table>
+      </div>
+      <div class="card" style="margin:0">
+        <div class="ct">Order size breakdown</div>
+        ${pkgOrderSizeBreakdown()}
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="ct">Revenue packaging calculator</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px">
+        <div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:6px">Target revenue ($)</div>
+          <input class="ri" id="pkg-rev-input" type="number" value="${pkgTargetRev}" min="0" step="10000" style="width:100%">
+        </div>
+      </div>
+      <div id="pkg-rev-results">${pkgRevenueCalc()}</div>
+    </div>
+    <div class="card">
+      <div class="ct">Order-level detail <span class="bdg bmu">Last ${pkgPeriod}d · ${pkgOrders.length} orders</span></div>
+      <table class="sf-t"><thead><tr><th>Order</th><th>Items</th><th style="text-align:right">½ mailer</th><th style="text-align:right">Std mailers</th><th style="text-align:right">2× carton</th><th style="text-align:right">4× carton</th></tr></thead>
+      <tbody>${pkgOrders.slice(0,100).map(o=>`<tr>
+        <td style="font-weight:600;font-size:12px">#${o.order_number||o.order_id}</td>
+        <td style="font-size:11px;color:var(--text2)">${Object.entries(o.skuQtys||{}).filter(([,v])=>v>0).map(([k,v])=>{const n={'BWc&c-MANLY':'Body Wash','Dc&c-MANLY':'Deodorant','SHAc&c-MANLY':'Shampoo','CONc&c-MANLY':'Conditioner','SSC&C':'Ball Deo','BB-MANLY':'Body Buffer','SCALP-MANLY':'Scalp Scrubber','CW-MANLY':'Cooling Wipes'};return v+'× '+(n[k]||k)}).join(', ')}</td>
+        <td style="text-align:right">${o.halfMailers||0}</td>
+        <td style="text-align:right;font-weight:600">${o.normalMailers||0}</td>
+        <td style="text-align:right">${o.carton2||0}</td>
+        <td style="text-align:right">${o.carton4||0}</td>
+      </tr>`).join('')}
+      ${pkgOrders.length>100?`<tr><td colspan="6" style="text-align:center;padding:10px;color:var(--text2);font-size:12px">Showing 100 of ${pkgOrders.length} orders</td></tr>`:''}
+      </tbody></table>
+    </div>`:''}`;
+  const psel=document.getElementById('pkg-period');
+  if(psel)psel.addEventListener('change',e=>{pkgPeriod=parseInt(e.target.value);loadPackagingOrders()});
+  const rvi=document.getElementById('pkg-rev-input');
+  if(rvi)rvi.addEventListener('input',e=>{
+    pkgTargetRev=parseInt(e.target.value)||0;
+    const card=document.getElementById('pkg-rev-card');
+    if(card){card.outerHTML=pkgRevenueCalc();
+      const rvi2=document.getElementById('pkg-rev-input');
+      if(rvi2){rvi2.focus();const v=rvi2.value;rvi2.value='';rvi2.value=v;}
+    }
+  });
+}
+
+const TABS=['overview','inventory','bundles','forecast','reorder','po','suppliers','payments','packaging','boxes'];
+const TLBLS={overview:'Overview',inventory:'Inventory',bundles:'Bundles',forecast:'Forecast',reorder:'Reorder',po:'Purchase Orders',suppliers:'Suppliers',payments:'Payments',packaging:'📦 Packaging',boxes:'📬 Box Tracker'};
+const RFNS={overview:rOverview,inventory:rInventory,bundles:rBundles,forecast:rForecast,reorder:rReorder,po:rPO,suppliers:rSuppliers,payments:rPayments,packaging:rPackaging,boxes:rBoxTracker};
+// ─── MAILER BOX TRACKER ──────────────────────────────────────────────────────
+
+const BOX_TYPES = [
+  { id:'MB-HALF',  name:'Half Mailer Box',          desc:'Fits ~2 items' },
+  { id:'MB-STD',   name:'Standard Mailer Box',       desc:'4 bottles + 3 gifts' },
+  { id:'MB-DBL',   name:'Double Carton (2× std)',    desc:'Holds 2 standard mailers' },
+  { id:'MB-QUAD',  name:'Quad Carton (4× std)',      desc:'Holds 4 standard mailers' },
+];
+
+// Load/save manual stock adjustments from localStorage
+function loadBoxStock() {
+  try { return JSON.parse(localStorage.getItem('sf_box_stock') || 'null') || {}; }
+  catch(e) { return {}; }
+}
+function saveBoxStock(data) {
+  try { localStorage.setItem('sf_box_stock', JSON.stringify(data)); } catch(e) {}
+}
+let BOX_STOCK = loadBoxStock();
+
+// Get inbound boxes from POs (status = ordered/in transit/partial)
+function boxesInbound() {
+  const inb = {};
+  for (const bo of BOX_TYPES) inb[bo.id] = 0;
+  for (const po of POS) {
+    if (['completed','cancelled'].includes(po.status)) continue;
+    for (const line of po.lines || []) {
+      if (inb[line.p] !== undefined) inb[line.p] += line.qty || 0;
+    }
+  }
+  return inb;
+}
+
+// Get boxes consumed from packaging calculation (uses pkgOrders)
+function boxesConsumed() {
+  const used = {};
+  for (const bo of BOX_TYPES) used[bo.id] = 0;
+  for (const o of pkgOrders) {
+    used['MB-HALF']  += o.halfMailers   || 0;
+    used['MB-STD']   += o.normalMailers || 0;
+    used['MB-DBL']   += o.carton2       || 0;
+    used['MB-QUAD']  += o.carton4       || 0;
+  }
+  return used;
+}
+
+function rBoxTracker() {
+  const el = document.getElementById('tab-boxes');
+  if (!el) return;
+
+  const inb  = boxesInbound();
+  const used = boxesConsumed();
+  const hasPkgData = pkgOrders.length > 0;
+
+  const rows = BOX_TYPES.map(bo => {
+    const onHandAU = BOX_STOCK[bo.id+'_au'] || 0;
+    const onHandUS = BOX_STOCK[bo.id+'_us'] || 0;
+    const onHand   = onHandAU + onHandUS;
+    const inbound  = inb[bo.id] || 0;           // info only — not added to on hand
+    const consumed = used[bo.id] || 0;           // actual used in period
+    const dailyUse = hasPkgData && pkgPeriod > 0 ? +(consumed / pkgPeriod).toFixed(1) : 0;
+    const remaining = Math.max(0, onHand - consumed); // on hand minus what's been used
+    const daysLeft = dailyUse > 0 ? Math.floor(onHand / dailyUse) : null; // days until out based on on hand
+    const status = daysLeft === null ? null : daysLeft <= 7 ? 'critical' : daysLeft <= 14 ? 'watch' : 'good';
+    return { bo, onHand, onHandAU, onHandUS, inbound, consumed, dailyUse, remaining, daysLeft, status };
+  });
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:2px">📬 Mailer Box Tracker</div>
+        <div class="sn" style="margin:0">Enter current stock on hand. Consumption is pulled from the Packaging tab (${pkgPeriod}-day window).</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        ${!hasPkgData ? `<button class="btn" onclick="switchTab('packaging')">⚠ Load packaging data first</button>` : ''}
+        <button class="btn btp" onclick="openBoxStockEditor()">✏ Update stock on hand</button>
+      </div>
+    </div>
+
+    ${!hasPkgData ? `<div style="background:var(--warnbg);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;font-size:13px;color:var(--warn)">
+      ⚠ Go to the Packaging tab and click Refresh to load consumption data first.
+    </div>` : ''}
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="ct">Box stock levels <span class="bdg bmu">${pkgPeriod}-day consumption</span></div>
+      <table class="sf-t">
+        <thead><tr>
+          <th>Box type</th>
+          <th style="text-align:right">On hand</th>
+          <th style="text-align:right">Inbound (POs)</th>
+          <th style="text-align:right">Total avail.</th>
+          <th style="text-align:right">Used (${pkgPeriod}d)</th>
+          <th style="text-align:right">Remaining</th>
+          <th style="text-align:right">Daily use</th>
+          <th style="text-align:right">Days left</th>
+          <th style="text-align:right">Status</th>
+        </tr></thead>
+        <tbody>
+        ${rows.map(r => `<tr>
+          <td>
+            <div style="font-weight:600;font-size:13px">${r.bo.name}</div>
+            <div style="font-size:11px;color:var(--text2)">${r.bo.desc}</div>
+          </td>
+          <td style="text-align:right">
+            <div style="font-weight:600">${fm(r.onHand)}</div>
+            <div style="font-size:10px;color:var(--text2)">🇦🇺 ${fm(r.onHandAU)} · 🇺🇸 ${fm(r.onHandUS)}</div>
+          </td>
+          <td style="text-align:right;color:var(--blue)">${r.inbound ? '+'+fm(r.inbound) : '—'}</td>
+          <td style="text-align:right">${hasPkgData ? fm(r.consumed) : '—'}</td>
+          <td style="text-align:right;font-weight:600">${hasPkgData ? fm(r.remaining) : '—'}</td>
+          <td style="text-align:right">${hasPkgData && r.dailyUse ? r.dailyUse+'/d' : '—'}</td>
+          <td style="text-align:right;font-weight:600">${r.daysLeft !== null ? r.daysLeft+'d' : '—'}</td>
+          <td style="text-align:right">${r.status ? `<span class="bdg ${r.status==='critical'?'brd':r.status==='watch'?'bwn':'bok'}">${r.status==='critical'?'Critical':r.status==='watch'?'Watch':'Good'}</span>` : '<span style="color:var(--text3)">—</span>'}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="ct">Projected depletion — at current daily use</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+        ${rows.filter(r=>r.dailyUse>0).map(r=>{
+          const depDate = r.daysLeft !== null ? new Date(Date.now()+r.daysLeft*86400000).toLocaleDateString('en-AU',{day:'numeric',month:'short'}) : null;
+          return `<div style="background:var(--bg2);border-radius:var(--radius);padding:14px">
+            <div style="font-size:12px;color:var(--text2);margin-bottom:4px">${r.bo.name}</div>
+            <div style="font-size:22px;font-weight:700;${r.daysLeft!==null&&r.daysLeft<=7?'color:var(--red)':r.daysLeft!==null&&r.daysLeft<=14?'color:var(--warn)':''}">${r.daysLeft !== null ? r.daysLeft+'d' : '—'}</div>
+            ${depDate ? `<div style="font-size:11px;color:var(--text2);margin-top:2px">Runs out ~${depDate}</div>` : ''}
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">${fm(r.remaining)} remaining · ${r.dailyUse}/d</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+function openBoxStockEditor() {
+  const warehouses = [
+    {id:'au', name:'🇦🇺 Internal WH (Cooper St)'},
+    {id:'us', name:'🇺🇸 Tidal Wave (US)'},
+  ];
+
+  const rows = BOX_TYPES.map(bo => `
+    <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:0.5px solid var(--border)">
+      <div style="font-size:13px;font-weight:600;margin-bottom:2px">${bo.name}</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:8px">${bo.desc}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        ${warehouses.map(wh=>`<div>
+          <div style="font-size:11px;color:var(--text2);margin-bottom:4px">${wh.name}</div>
+          <input class="form-in" type="number" id="box-stock-${bo.id}-${wh.id}" value="${(BOX_STOCK[bo.id+'_'+wh.id])||0}" min="0" placeholder="0">
+        </div>`).join('')}
+      </div>
+    </div>`).join('');
+
+  openM(`<div class="mbox"><div class="ct">Update box stock on hand</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:16px">Enter your current physical stock count per warehouse for each box type.</div>
+    ${rows}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
+      <button class="btn" onclick="closeM()">Cancel</button>
+      <button class="btn btp" onclick="saveBoxStockEdit()">Save</button>
+    </div></div>`);
+}
+
+function saveBoxStockEdit() {
+  const warehouses = ['au','us'];
+  for (const bo of BOX_TYPES) {
+    let total = 0;
+    for (const wh of warehouses) {
+      const val = parseInt(document.getElementById('box-stock-'+bo.id+'-'+wh)?.value) || 0;
+      BOX_STOCK[bo.id+'_'+wh] = val;
+      total += val;
+    }
+    BOX_STOCK[bo.id] = total; // keep total for consumption calc
+  }
+  saveBoxStock(BOX_STOCK);
+  closeM();
+  rBoxTracker();
+}
+
+
+function switchTab(t){activeTab=t;TABS.forEach(x=>{const el=document.getElementById('tab-'+x);if(el)el.classList.toggle('active',x===t)});document.querySelectorAll('.tb').forEach(b=>b.classList.toggle('active',b.dataset.t===t));RFNS[t]?.()}
+function rActive(){RFNS[activeTab]?.()}
+document.getElementById('tnav').innerHTML=TABS.map(t=>`<button class="tb${t===activeTab?' active':''}" data-t="${t}">${TLBLS[t]}</button>`).join('');
+document.querySelectorAll('.tb').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.t)));
+document.getElementById('tab-packaging').addEventListener('input',e=>{
+  if(e.target.id==='pkg-rev-input'){pkgTargetRev=parseInt(e.target.value)||0;updatePkgRevCalc();}
+});
+switchTab(activeTab);
+</script>
+
+</div>
+</body>
+</html
+<!-- Login Screen -->
+<div id="login-screen" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center">
+  <div style="width:100%;max-width:360px;padding:0 24px">
+    <div style="text-align:center;margin-bottom:32px">
+      <div style="font-size:24px;font-weight:700;letter-spacing:-.5px;margin-bottom:6px">Stockflow</div>
+      <div style="font-size:13px;color:var(--text2)">Enter password to continue</div>
+    </div>
+    <div id="login-error" style="display:none;background:#fee2e2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px"></div>
+    <div style="margin-bottom:20px">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:6px">Password</div>
+      <input id="auth-password" type="password" class="ri" placeholder="••••••••" style="width:100%;box-sizing:border-box">
+    </div>
+    <button id="login-btn" class="btn btp" style="width:100%;padding:12px;font-size:14px" onclick="doLogin()">Sign in</button>
+  </div>
+</div>
+
+>
