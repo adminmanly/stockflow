@@ -497,7 +497,7 @@ function toggleInvCustom(){
   // No need to wire listeners — applyInvCustom reads DOM directly on click
 }
 
-function applyInvCustom(){
+function applyInvCustom(forceRefresh){
   // Read directly from DOM at time of click
   const f=document.getElementById('inv-from');
   const t=document.getElementById('inv-to');
@@ -509,7 +509,7 @@ function applyInvCustom(){
   const ms=new Date(to)-new Date(from);
   const days=Math.max(1,Math.round(ms/864e5));
   INV_PERIOD=days;
-  syncInventoryVelocityCustom(from,to,days);
+  syncInventoryVelocityCustom(from,to,days,forceRefresh);
 }
 
 async function syncInventoryVelocityCustom(from,to,days){
@@ -517,7 +517,7 @@ async function syncInventoryVelocityCustom(from,to,days){
   // API fetches that many days back from today as approximation
   // For short windows (1-3d) this is most useful for spike detection
   try{
-    const r=await fetch('/api/live/shopify?from='+from+'&to='+to+'&refresh=1');
+    const r=await fetch('/api/live/shopify?from='+from+'&to='+to);
     const d=await r.json();
     if(!r.ok||d.error)throw new Error(d.error);
     if(d.velocity_us){for(const[p,v]of Object.entries(d.velocity_us)){INV_DAILY.tw[p]=v}}
@@ -562,7 +562,7 @@ function rInventory(){
           <input type="date" id="inv-from" value="${invCustomFrom}" max="${new Date().toISOString().split('T')[0]}" onchange="invCustomFrom=this.value" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg1);color:var(--text1)">
           <span style="font-size:11px;color:var(--text2)">→</span>
           <input type="date" id="inv-to" value="${invCustomTo}" max="${new Date().toISOString().split('T')[0]}" onchange="invCustomTo=this.value" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg1);color:var(--text1)">
-          <button class="btn btp" style="font-size:11px;padding:3px 10px" onclick="applyInvCustom()">Apply</button>
+          <button class="btn btp" style="font-size:11px;padding:3px 10px" onclick="applyInvCustom()" ondblclick="applyInvCustom(true)" title="Double-click to force refresh">Apply</button>
         </div>`:''}
         <span style="font-size:11px;color:var(--text3)">${invCustomMode&&invCustomFrom&&invCustomTo?invCustomFrom+' → '+invCustomTo+' ('+INV_PERIOD+'d)':INV_PERIOD+'d avg'}</span>
       </div>
