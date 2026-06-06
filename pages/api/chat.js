@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   const { message, context, history = [] } = req.body
   if (!message) return res.status(400).json({ error: 'No message' })
 
-  const systemPrompt = `You are Stockflow AI — an inventory assistant for Manly, a personal care brand. 
+  const systemPrompt = `You are Stockflow AI — an inventory assistant for Manly, a personal care brand.
 You have access to live inventory data and can answer questions and perform actions.
 
 CURRENT DATA:
@@ -57,9 +57,17 @@ RESPONSE STYLE:
   ]
 
   try {
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set in Vercel env vars' })
-    if (!apiKey.startsWith('sk-ant-')) return res.status(500).json({ error: 'ANTHROPIC_API_KEY looks wrong — should start with sk-ant-. Current value starts with: ' + apiKey.slice(0,8) })
+    // Try env var first, then fallback header for debugging
+    const apiKey = process.env.ANTHROPIC_API_KEY || process.env.NEXT_PUBLIC_ANTHROPIC_KEY || ''
+    
+    // Debug: log what we can see
+    console.log('[Chat] env keys available:', Object.keys(process.env).filter(k => k.includes('ANTHROP')))
+    console.log('[Chat] key found:', !!apiKey, 'length:', apiKey.length)
+    
+    if (!apiKey) return res.status(500).json({ 
+      error: 'ANTHROPIC_API_KEY not set',
+      envKeys: Object.keys(process.env).filter(k => !k.includes('SECRET') && !k.includes('TOKEN') && !k.includes('KEY'))
+    })
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -69,7 +77,7 @@ RESPONSE STYLE:
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 1024,
         system: systemPrompt,
         messages
