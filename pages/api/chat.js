@@ -57,11 +57,15 @@ RESPONSE STYLE:
   ]
 
   try {
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set in Vercel env vars' })
+    if (!apiKey.startsWith('sk-ant-')) return res.status(500).json({ error: 'ANTHROPIC_API_KEY looks wrong — should start with sk-ant-. Current value starts with: ' + apiKey.slice(0,8) })
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'x-api-key': apiKey.trim(),
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
