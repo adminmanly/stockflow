@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   const { message, context, history = [] } = req.body
   if (!message) return res.status(400).json({ error: 'No message' })
 
-  const systemPrompt = `You are Stockflow AI — an inventory assistant for Manly, a personal care brand.
+  const systemPrompt = `You are Stockflow AI — an inventory assistant for Manly, a personal care brand. 
 You have access to live inventory data and can answer questions and perform actions.
 
 CURRENT DATA:
