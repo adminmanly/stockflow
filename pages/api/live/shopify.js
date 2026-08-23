@@ -96,6 +96,23 @@ export default async function handler(req, res) {
         if (!v.sku) continue
         const sku = v.sku.trim()
         if (!sku || sku.length === 0) continue // skip blank SKUs
+        if (sku.startsWith('ROUTEINS')) continue // skip Route insurance
+        if (sku === 'FREEGIFTS' || sku === 'V2FREEGIFTS') continue // skip gift bundles
+
+        // Skip all bundle/kit SKUs — these are multi-product bundles not individual items
+        const BUNDLE_SKUS = new Set([
+          'BCKc&c','SEC&C','HCKc&c','STKc&c','BPc&c',
+          'SE','SE2','BE','WPC&C','OLDSE','SRO',
+          'ACNEKIT','BACNE','REPAIR','SKINDEFENCE','RESTOREHYDRATE',
+          'SC+B+CC+B',
+          // DUO products
+          'DSCB+B-DUO','DSMO+B-DUO','DSFF+B-DUO','DSCC+B-DUO',
+          // Gift card / other non-physical
+        ])
+        if (BUNDLE_SKUS.has(sku)) continue // skip kits and bundles
+
+        // Skip variant suffixes — consolidate by product title instead
+        // e.g. BWC+B, BWC+B2, BWC+B3, BWC+B4 all become 1 row grouped by productTitle
         if (v.inventory_item_id) {
           itemToSku[String(v.inventory_item_id)] = sku
           skuToItemId[sku] = String(v.inventory_item_id)
