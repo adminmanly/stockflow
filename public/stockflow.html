@@ -817,6 +817,49 @@ function uReorder(){
       </tbody></table>
     </div>`;
 }
+function rBundles(){
+  const ib=inbound();
+  document.getElementById('tab-bundles').innerHTML=`<div class="sn">Bundle fulfillability based on current stock per FC.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px">
+    ${BUNDLES.map(b=>{const comps=Object.entries(b.c).map(([p,q])=>`${q}× ${p}`).join(', ');return`<div class="card" style="margin:0"><div style="font-size:13px;font-weight:600;margin-bottom:2px">${b.n}</div><div style="font-size:11px;color:var(--text2);margin-bottom:4px">SKU: ${b.sku}</div><div style="font-size:20px;font-weight:600;margin-bottom:8px">$${b.p.toFixed(2)}</div><div style="font-size:12px;color:var(--text2);margin-bottom:10px">Components: ${comps}</div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px;letter-spacing:.04em">FULFILLABLE PER FC</div>${FCS.map(f=>{const qty=Math.min(...Object.entries(b.c).map(([p,q])=>Math.floor((STOCK[f.id]?.[p]??0)/q)));const qtyI=Math.min(...Object.entries(b.c).map(([p,q])=>Math.floor(((STOCK[f.id]?.[p]??0)+(ib[f.id]?.[p]??0))/q)));const mD=Math.min(...Object.keys(b.c).map(p=>dv(f.id,p)||999));return`<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:6px 0;border-top:0.5px solid var(--border)"><span>${f.flag} ${f.name}</span><div style="display:flex;align-items:center;gap:5px"><span style="font-weight:600">${qty}</span><span style="color:var(--text2);font-size:11px">+${qtyI-qty} inb.</span>${bdg(mD===999?null:mD)}</div></div>`}).join('')}</div>`}).join('')}</div>`;
+}
+
+function rForecast(){
+  const gd=gapDays();const ib=inbound();
+  const hasInvDaily=Object.keys(INV_DAILY.tw).length>0||Object.keys(INV_DAILY.vi).length>0;
+  const velSrc=hasInvDaily?INV_DAILY:DAILY;
+  const velPeriodLabel=INV_PERIOD+'d';
+  const dvF=(fc,p)=>dvWithPeriod(fc,p,velSrc);
+  document.getElementById('tab-forecast').innerHTML=`
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+      <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">
+        <div>
+          <div class="fl" style="margin-bottom:4px">Planning window <span class="bdg bmu" style="margin-left:4px">Days of stock to cover</span></div>
+          <select class="sf-sel" id="gsel"><option value="30" ${gMode==='30'?'selected':''}>30 days</option><option value="60" ${gMode==='60'?'selected':''}>60 days</option><option value="90" ${gMode==='90'?'selected':''}>90 days</option><option value="120" ${gMode==='120'?'selected':''}>120 days</option><option value="custom" ${gMode==='custom'?'selected':''}>Custom…</option></select>
+        </div>
+        <div id="cdw" style="display:${gMode==='custom'?'flex':'none'};gap:8px;align-items:flex-end;flex-wrap:wrap"><div><div class="fl" style="margin-bottom:3px">From</div><input type="date" class="fi" id="gfrom" value="${csFrom}" style="width:140px"></div><div><div class="fl" style="margin-bottom:3px">To</div><input type="date" class="fi" id="gto" value="${csTo}" style="width:140px"></div></div>
+        <span class="bdg bmu">${gapLbl()}</span>
+      </div>
+      <div style="font-size:12px;color:var(--text2);background:var(--bg2);border-radius:var(--radius);padding:8px 12px;line-height:1.6">
+        <strong>Velocity: ${velPeriodLabel} avg</strong><br>
+        <span style="font-size:11px">Change in Inventory tab</span>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:150px repeat(2,1fr);gap:8px;margin-bottom:4px"><div></div>${FCS.map(f=>`<div style="font-size:11px;font-weight:700;color:var(--text2);text-align:center">${f.flag} ${f.name}</div>`).join('')}</div>
+    <div style="font-size:11px;font-weight:700;color:var(--text2);padding:4px 0;margin-bottom:6px;border-top:0.5px solid var(--border);letter-spacing:.04em">CORE PRODUCTS</div>
+    ${CORE_P.map(p=>`<div style="display:grid;grid-template-columns:150px repeat(2,1fr);gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:13px;font-weight:600">${p}</div>${FCS.map(f=>{const d=dvF(f.id,p);return`<div class="fc-cell ${d===null?'':cc(d)}"><div class="fc-days">${d===null?'—':d}</div><div class="fc-lbl">days</div></div>`}).join('')}</div>`).join('')}
+    <div style="font-size:11px;font-weight:700;color:var(--text2);padding:4px 0;margin:6px 0;border-top:0.5px dashed var(--border2);letter-spacing:.04em">FREE GIFTS / ADD-ONS</div>
+    ${GIFT_P.map(p=>`<div style="display:grid;grid-template-columns:150px repeat(2,1fr);gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:13px;font-weight:600">${p}</div>${FCS.map(f=>{const d=dvF(f.id,p);return`<div class="fc-cell ${d===null?'':cc(d)}"><div class="fc-days">${d===null?'—':d}</div><div class="fc-lbl">days</div></div>`}).join('')}</div>`).join('')}
+    <div class="card" style="margin-top:16px"><div class="ct">Gap to fill — ${gapLbl()} <span class="bdg bmu">at ${velPeriodLabel} velocity</span></div>
+      <table class="sf-t"><thead><tr><th>FC</th><th>Product</th><th>Type</th><th style="text-align:right">Days left</th><th style="text-align:right">Need</th><th style="text-align:right">Stock</th><th style="text-align:right">Inbound</th><th style="text-align:right">Gap</th></tr></thead><tbody>
+      ${FCS.flatMap(f=>ALL_TRACK.map(p=>{const d=dvF(f.id,p),dl=velSrc[f.id]?.[p]??0,need=Math.ceil(dl*gd),cur=STOCK[f.id]?.[p]??0,inb=ib[f.id]?.[p]??0,gap=Math.max(0,need-cur-inb);return{f,p,d,dl,need,cur,inb,gap,gift:GIFT_P.includes(p)}})).filter(r=>r.dl!==0||r.cur>0).sort((a,b)=>(a.d||999)-(b.d||999)).map(r=>`<tr><td>${r.f.flag} ${r.f.name}</td><td style="font-weight:600">${r.p}</td><td><span class="bdg ${r.gift?'bin':'bmu'}">${r.gift?'gift':'core'}</span></td><td style="text-align:right">${bdg(r.d)}</td><td style="text-align:right">${r.need||'—'}</td><td style="text-align:right">${r.cur}</td><td style="text-align:right;color:var(--blue)">${r.inb?'+'+fm(r.inb):'—'}</td><td style="text-align:right;font-weight:600;${r.gap?'color:var(--red)':''}">${r.gap?'+'+fm(r.gap):'✓'}</td></tr>`).join('')}
+      </tbody></table></div>`;
+  document.getElementById('gsel').addEventListener('change',e=>{gMode=e.target.value;document.getElementById('cdw').style.display=gMode==='custom'?'flex':'none';rForecast()});
+  const gf=document.getElementById('gfrom'),gt=document.getElementById('gto');
+  if(gf)gf.addEventListener('change',e=>{csFrom=e.target.value;if(csFrom&&csTo)rForecast()});
+  if(gt)gt.addEventListener('change',e=>{csTo=e.target.value;if(csFrom&&csTo)rForecast()});
+}
+
 function rReorder(){
   document.getElementById('tab-reorder').innerHTML=`
     <div class="card" style="margin-bottom:14px">
