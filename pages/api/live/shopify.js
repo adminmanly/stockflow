@@ -112,23 +112,45 @@ export default async function handler(req, res) {
     const TRACKED_SKUS = new Set(Object.keys(SKU_MAP))
     const trackedItemIds = Object.keys(SKU_MAP).map(s => skuToItemId[s]).filter(Boolean)
 
-    // AU location
+    // AU location — try multiple name patterns
     const locations = locData.locations.filter(l => l.active)
     const auLocation = locations.find(l =>
       l.name === '11/81 Cooper St, Campbellfield' ||
       l.name?.toLowerCase().includes('campbellfield') ||
-      l.name?.toLowerCase().includes('cooper st')
+      l.name?.toLowerCase().includes('cooper st') ||
+      l.name?.toLowerCase().includes('internal wh') ||
+      l.name?.toLowerCase().includes('australia') ||
+      l.name?.toLowerCase().includes('victoria') ||
+      (l.country_code === 'AU' && locations.length > 1)
     )
+    // Log all locations for debugging
+    console.log('[Shopify] All locations:', locations.map(l => `${l.id}: ${l.name} (${l.country_code})`))
+    console.log('[Shopify] AU location matched:', auLocation?.name || 'NONE FOUND')
 
     // Fetch COGS and AU stock in parallel
-    const [cogsRes, invRes] = await Promise.all([
+    // Get ALL inventory item IDs for AU stock lookup
+    const allItemIds = Object.values(skuToItemId).filter(Boolean)
+    const chunked = (arr, size) => Array.from({length: Math.ceil(arr.length/size)}, (_,i) => arr.slice(i*size,(i+1)*size))
+    const allItemChunks = chunked(allItemIds, 100) // Shopify limit per request
+
+    const [cogsRes] = await Promise.all([
       trackedItemIds.length > 0
         ? fetch(`${BASE}/inventory_items.json?ids=${trackedItemIds.join(',')}&limit=250`, { headers: HEADERS })
         : Promise.resolve(null),
-      auLocation && trackedItemIds.length > 0
-        ? fetch(`${BASE}/inventory_levels.json?location_id=${auLocation.id}&inventory_item_ids=${trackedItemIds.join(',')}&limit=250`, { headers: HEADERS })
-        : Promise.resolve(null)
     ])
+
+    // Fetch AU stock for ALL items (paginated by chunk)
+    const allInvLevels = []
+    if (auLocation && allItemChunks.length > 0) {
+      for (const chunk of allItemChunks) {
+        const r = await fetch(`${BASE}/inventory_levels.json?location_id=${auLocation.id}&inventory_item_ids=${chunk.join(',')}&limit=250`, { headers: HEADERS })
+        if (r.ok) {
+          const d = await r.json()
+          allInvLevels.push(...(d.inventory_levels || []))
+        }
+      }
+    }
+    const invRes = null // handled above
 
     const cogsBySku = {}
     if (cogsRes?.ok) {
@@ -140,14 +162,10 @@ export default async function handler(req, res) {
     }
 
     const auStockBySku = {}
-    if (invRes?.ok) {
-      const d = await invRes.json()
-      for (const level of d.inventory_levels || []) {
-        if (String(level.location_id) !== String(auLocation?.id)) continue
-        const sku = itemToSku[String(level.inventory_item_id)]
-        if (!sku) continue
-        auStockBySku[sku] = Math.max(0, level.available || 0)
-      }
+    for (const level of allInvLevels) {
+      const sku = itemToSku[String(level.inventory_item_id)]
+      if (!sku) continue
+      auStockBySku[sku] = Math.max(0, level.available || 0)
     }
 
     // Paginate orders
@@ -182,21 +200,18 @@ export default async function handler(req, res) {
           const sku = item.sku?.trim()
           if (!sku || !price) continue
 
-          // Track velocity for known SKUs
-          if (TRACKED_SKUS.has(sku)) {
-            if (isAU) soldBySkuAU[sku] = (soldBySkuAU[sku] || 0) + qty
-            else soldBySkuUS[sku] = (soldBySkuUS[sku] || 0) + qty
-            if (!revBySku[sku]) revBySku[sku] = { rev: 0, qty: 0 }
-            revBySku[sku].rev += price * qty
-            revBySku[sku].qty += qty
-          }
+          // Track velocity for ALL SKUs
+          if (isAU) soldBySkuAU[sku] = (soldBySkuAU[sku] || 0) + qty
+          else soldBySkuUS[sku] = (soldBySkuUS[sku] || 0) + qty
+          if (!revBySku[sku]) revBySku[sku] = { rev: 0, qty: 0 }
+          revBySku[sku].rev += price * qty
+          revBySku[sku].qty += qty
 
           // Distribute bundle revenue to components
           if (BUNDLE_COMPONENTS[sku]) {
             const comps = BUNDLE_COMPONENTS[sku]
             const revPerComp = (price * qty) / comps.length
             for (const compSku of comps) {
-              if (!TRACKED_SKUS.has(compSku)) continue
               if (!revBySku[compSku]) revBySku[compSku] = { rev: 0, qty: 0 }
               revBySku[compSku].rev += revPerComp
               revBySku[compSku].qty += qty
@@ -210,7 +225,7 @@ export default async function handler(req, res) {
       orderUrl = next ? next[1] : null
     }
 
-    // Build tracked product results
+    // Build tracked product results (legacy 8 SKUs by display name)
     const auStockByProduct = {}
     const velocityUSByProduct = {}
     const velocityAUByProduct = {}
@@ -226,6 +241,22 @@ export default async function handler(req, res) {
       cogsByProduct[productName] = cogsBySku[sku] || 0
     }
 
+    // Build full SKU catalogue with stock + velocity for ALL discovered SKUs
+    const allSkusData = {}
+    for (const [sku, info] of Object.entries(allDiscoveredSkus)) {
+      const rv = revBySku[sku]
+      allSkusData[sku] = {
+        ...info,
+        au_stock: auStockBySku[sku] || 0,
+        velocity_us: +((soldBySkuUS[sku] || 0) / validDays).toFixed(1),
+        velocity_au: +((soldBySkuAU[sku] || 0) / validDays).toFixed(1),
+        avg_price: rv?.qty > 0 ? +(rv.rev / rv.qty).toFixed(2) : info.price || 0,
+        cogs: cogsBySku[sku] || 0,
+        is_tracked: !!SKU_MAP[sku],
+        display_name: SKU_MAP[sku] || null,
+      }
+    }
+
     const result = {
       ok: true,
       source: 'shopify',
@@ -239,8 +270,9 @@ export default async function handler(req, res) {
       total_revenue: +totalRevenue.toFixed(2),
       orders_analysed: totalOrders,
       au_location: auLocation?.name || 'not found',
-      // Full product catalogue discovered from Shopify
-      all_skus: allDiscoveredSkus,
+      all_locations: locations.map(l => ({ id: l.id, name: l.name, country: l.country_code, active: l.active })),
+      // Full SKU catalogue with stock + velocity
+      all_skus: allSkusData,
       sku_to_product: skuToProduct,
       cached: false,
       cached_at: new Date().toISOString(),
