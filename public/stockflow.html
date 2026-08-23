@@ -355,7 +355,7 @@ async function deleteSupplierServer(sid){
 }
 
 let _unused=1,lineCtx=200,pof={sup:'',fc:'',st:'',df:'',dt:'',prods:[]},aFC='tw',gMode='30',csFrom='',csTo='',tRev=50000,tDays=60,activeTab='po',modalPayments=[],lineIds=[];
-const STOCK={tw:{},vi:{}};const AVG_PRICE={};const COGS={};
+const STOCK={tw:{},vi:{}};const AVG_PRICE={};const COGS={};let ALL_SKUS_DATA={};
 const DAILY={tw:{},vi:{}};
 let shConnected=false,skConnected=false;
 const sup=id=>SUPPLIERS.find(s=>s.id===id)||{name:'Unknown',email:'',addr:'',terms:{deposit:30,port:0,receipt:70},currency:'AUD',payTerms:'',bankName:'',bankAcct:''};
@@ -411,6 +411,15 @@ async function syncShopify(btn){
     if(d.daily_revenue)DAILY_REV=d.daily_revenue;
     if(d.orders_analysed&&d.period_days)DAILY_ORDERS=d.orders_analysed/d.period_days;
     if(d.period_days)VELOCITY_PERIOD=d.period_days;
+    if(d.all_skus){
+      // Filter out ROUTEINS (Route insurance), free gifts bundles, and empty SKUs
+      ALL_SKUS_DATA={};
+      for(const[sku,info]of Object.entries(d.all_skus)){
+        if(sku.startsWith('ROUTEINS'))continue;
+        if(sku==='FREEGIFTS'||sku==='V2FREEGIFTS')continue;
+        ALL_SKUS_DATA[sku]=info;
+      }
+    }
     skConnected=true;
     btn.textContent=d.cached?'● Shopify (cached)':'● Shopify';btn.style.color='var(--green)';btn.disabled=false;
     btn.title=d.cached?'Cached at '+new Date(d.cached_at).toLocaleTimeString()+' — click to refresh':'Live data';
@@ -643,6 +652,7 @@ async function syncInventoryVelocity(days){
     if(d.velocity_au){for(const[p,v]of Object.entries(d.velocity_au)){INV_DAILY.vi[p]=v}}
     // Also update AU stock if fresher
     if(d.au_stock){for(const[p,q]of Object.entries(d.au_stock)){STOCK.vi[p]=q}}
+    if(d.all_skus){ALL_SKUS_DATA=d.all_skus;}
   }catch(e){console.error('[InvVelocity]',e.message);}
   rInventory();
 }
@@ -650,7 +660,6 @@ async function syncInventoryVelocity(days){
 function rInventory(){
   const ib=inbound();const fc=FCS.find(f=>f.id===aFC);
   const isLive=aFC==='tw'?shConnected:skConnected;
-  // Use INV_DAILY if populated, else fall back to DAILY
   const hasInvDaily=Object.keys(INV_DAILY.tw).length>0||Object.keys(INV_DAILY.vi).length>0;
   const velSrc=hasInvDaily?INV_DAILY:DAILY;
   const dvInv=(fc,p)=>{const s=STOCK[fc]?.[p]??0,d=velSrc[fc]?.[p]??0;return s>0&&d>0?Math.floor(s/d):s===0?null:999};
@@ -674,54 +683,76 @@ function rInventory(){
     </div>
     ${!isLive?`<div style="background:var(--warnbg);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--warn)">⚠ ${aFC==='tw'?'ShipHero not connected — Tidal Wave showing no data.':'Shopify not connected — Internal WH showing no data.'}</div>`:''}
     <div class="card"><div class="ct">${fc.flag} ${fc.name} — ${fc.loc}<span class="bdg ${isLive?'bok':'bmu'}">${isLive?(aFC==='tw'?'ShipHero live':'Shopify live'):'not connected'}</span></div>
-    <table class="sf-t"><thead><tr><th>Product</th><th>Type</th><th style="text-align:right">In stock</th><th style="text-align:right">Inbound (POs)</th><th style="text-align:right">Total avail.</th><th style="text-align:right">Daily</th><th style="text-align:right">Days left</th><th style="text-align:right">Status</th></tr></thead><tbody>
-    ${CORE_P.map(p=>{const s=STOCK[aFC]?.[p]??0,b=ib[aFC]?.[p]??0,dl=velSrc[aFC]?.[p]??0,d=dvInv(aFC,p);return`<tr><td style="font-weight:600">${p}</td><td><span class="bdg bmu">core</span></td><td style="text-align:right">${fm(s)}</td><td style="text-align:right;color:var(--blue)">${b?'+'+fm(b):'—'}</td><td style="text-align:right;font-weight:600">${fm(s+b)}</td><td style="text-align:right">${dl?dl+'/d':'—'}</td><td style="text-align:right;font-weight:600">${d===null?'—':d+'d'}</td><td style="text-align:right">${bdg(d)}</td></tr>`}).join('')}
-    <tr><td colspan="8" style="font-size:11px;font-weight:700;color:var(--text2);background:var(--bg2);padding:4px 8px;letter-spacing:.04em">FREE GIFTS / ADD-ONS</td></tr>
-    ${GIFT_P.map(p=>{const s=STOCK[aFC]?.[p]??0,b=ib[aFC]?.[p]??0,dl=velSrc[aFC]?.[p]??0,d=dvInv(aFC,p);return`<tr><td style="font-weight:600">${p}</td><td><span class="bdg bin">gift</span></td><td style="text-align:right">${fm(s)}</td><td style="text-align:right;color:var(--blue)">${b?'+'+fm(b):'—'}</td><td style="text-align:right;font-weight:600">${fm(s+b)}</td><td style="text-align:right">${dl?dl+'/d':'—'}</td><td style="text-align:right;font-weight:600">${d===null?'—':d+'d'}</td><td style="text-align:right">${bdg(d)}</td></tr>`}).join('')}
-    </tbody></table></div>`;
+    <table class="sf-t"><thead><tr><th>Product</th><th>SKU</th><th>Type</th><th style="text-align:right">In stock</th><th style="text-align:right">Inbound</th><th style="text-align:right">Total avail.</th><th style="text-align:right">Daily</th><th style="text-align:right">Days left</th><th style="text-align:right">Status</th></tr></thead><tbody id="inv-tbody"></tbody></table></div>`;
   document.querySelectorAll('#fctabs .fct').forEach(b=>b.addEventListener('click',()=>{aFC=b.dataset.f;rInventory()}));
+  populateInvTable(ib,velSrc,dvInv);
 }
-function rBundles(){
-  const ib=inbound();
-  document.getElementById('tab-bundles').innerHTML=`<div class="sn">Bundle fulfillability based on current stock per FC.</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px">
-    ${BUNDLES.map(b=>{const comps=Object.entries(b.c).map(([p,q])=>`${q}× ${p}`).join(', ');return`<div class="card" style="margin:0"><div style="font-size:13px;font-weight:600;margin-bottom:2px">${b.n}</div><div style="font-size:11px;color:var(--text2);margin-bottom:4px">SKU: ${b.sku}</div><div style="font-size:20px;font-weight:600;margin-bottom:8px">$${b.p.toFixed(2)}</div><div style="font-size:12px;color:var(--text2);margin-bottom:10px">Components: ${comps}</div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px;letter-spacing:.04em">FULFILLABLE PER FC</div>${FCS.map(f=>{const qty=Math.min(...Object.entries(b.c).map(([p,q])=>Math.floor((STOCK[f.id]?.[p]??0)/q)));const qtyI=Math.min(...Object.entries(b.c).map(([p,q])=>Math.floor(((STOCK[f.id]?.[p]??0)+(ib[f.id]?.[p]??0))/q)));const mD=Math.min(...Object.keys(b.c).map(p=>dv(f.id,p)||999));return`<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:6px 0;border-top:0.5px solid var(--border)"><span>${f.flag} ${f.name}</span><div style="display:flex;align-items:center;gap:5px"><span style="font-weight:600">${qty}</span><span style="color:var(--text2);font-size:11px">+${qtyI-qty} inb.</span>${bdg(mD===999?null:mD)}</div></div>`}).join('')}</div>`}).join('')}</div>`;
-}
-function rForecast(){
-  const gd=gapDays();const ib=inbound();
-  // Use INV_DAILY if set (from inventory period selector), else fall back to DAILY
-  const hasInvDaily=Object.keys(INV_DAILY.tw).length>0||Object.keys(INV_DAILY.vi).length>0;
-  const velSrc=hasInvDaily?INV_DAILY:DAILY;
-  const velPeriodLabel=INV_PERIOD+'d';
-  const dvF=(fc,p)=>dvWithPeriod(fc,p,velSrc);
-  document.getElementById('tab-forecast').innerHTML=`
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap">
-      <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">
-        <div>
-          <div class="fl" style="margin-bottom:4px">Planning window <span class="bdg bmu" style="margin-left:4px">How many days of stock you want to cover</span></div>
-          <select class="sf-sel" id="gsel"><option value="30" ${gMode==='30'?'selected':''}>30 days</option><option value="60" ${gMode==='60'?'selected':''}>60 days</option><option value="90" ${gMode==='90'?'selected':''}>90 days</option><option value="120" ${gMode==='120'?'selected':''}>120 days</option><option value="custom" ${gMode==='custom'?'selected':''}>Custom…</option></select>
-        </div>
-        <div id="cdw" style="display:${gMode==='custom'?'flex':'none'};gap:8px;align-items:flex-end;flex-wrap:wrap"><div><div class="fl" style="margin-bottom:3px">From</div><input type="date" class="fi" id="gfrom" value="${csFrom}" style="width:140px"></div><div><div class="fl" style="margin-bottom:3px">To</div><input type="date" class="fi" id="gto" value="${csTo}" style="width:140px"></div></div>
-        <span class="bdg bmu">${gapLbl()}</span>
-      </div>
-      <div style="font-size:12px;color:var(--text2);background:var(--bg2);border-radius:var(--radius);padding:8px 12px;line-height:1.6">
-        <strong>Velocity basis: ${velPeriodLabel} avg</strong><br>
-        <span style="font-size:11px">Change in Inventory tab → Velocity period</span>
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:150px repeat(2,1fr);gap:8px;margin-bottom:4px"><div></div>${FCS.map(f=>`<div style="font-size:11px;font-weight:700;color:var(--text2);text-align:center">${f.flag} ${f.name}</div>`).join('')}</div>
-    <div style="font-size:11px;font-weight:700;color:var(--text2);padding:4px 0;margin-bottom:6px;border-top:0.5px solid var(--border);letter-spacing:.04em">CORE PRODUCTS</div>
-    ${CORE_P.map(p=>`<div style="display:grid;grid-template-columns:150px repeat(2,1fr);gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:13px;font-weight:600">${p}</div>${FCS.map(f=>{const d=dvF(f.id,p);return`<div class="fc-cell ${d===null?'':cc(d)}"><div class="fc-days">${d===null?'—':d}</div><div class="fc-lbl">days</div></div>`}).join('')}</div>`).join('')}
-    <div style="font-size:11px;font-weight:700;color:var(--text2);padding:4px 0;margin:6px 0;border-top:0.5px dashed var(--border2);letter-spacing:.04em">FREE GIFTS / ADD-ONS</div>
-    ${GIFT_P.map(p=>`<div style="display:grid;grid-template-columns:150px repeat(2,1fr);gap:8px;align-items:center;margin-bottom:8px"><div style="font-size:13px;font-weight:600">${p}</div>${FCS.map(f=>{const d=dvF(f.id,p);return`<div class="fc-cell ${d===null?'':cc(d)}"><div class="fc-days">${d===null?'—':d}</div><div class="fc-lbl">days</div></div>`}).join('')}</div>`).join('')}
-    <div class="card" style="margin-top:16px"><div class="ct">Gap to fill — ${gapLbl()} <span class="bdg bmu">at ${velPeriodLabel} velocity · units needed to cover next ${gapLbl()} of sales</span></div>
-      <table class="sf-t"><thead><tr><th>FC</th><th>Product</th><th>Type</th><th style="text-align:right">Days left</th><th style="text-align:right">Need</th><th style="text-align:right">Stock</th><th style="text-align:right">Inbound</th><th style="text-align:right">Gap</th></tr></thead><tbody>
-      ${FCS.flatMap(f=>ALL_TRACK.map(p=>{const d=dvF(f.id,p),dl=velSrc[f.id]?.[p]??0,need=Math.ceil(dl*gd),cur=STOCK[f.id]?.[p]??0,inb=ib[f.id]?.[p]??0,gap=Math.max(0,need-cur-inb);return{f,p,d,need,cur,inb,gap,gift:GIFT_P.includes(p)}})).filter(r=>r.dl!==0||r.cur>0).sort((a,b)=>(a.d||999)-(b.d||999)).map(r=>`<tr><td>${r.f.flag} ${r.f.name}</td><td style="font-weight:600">${r.p}</td><td><span class="bdg ${r.gift?'bin':'bmu'}">${r.gift?'gift':'core'}</span></td><td style="text-align:right">${bdg(r.d)}</td><td style="text-align:right">${r.need||'—'}</td><td style="text-align:right">${r.cur}</td><td style="text-align:right;color:var(--blue)">${r.inb?'+'+fm(r.inb):'—'}</td><td style="text-align:right;font-weight:600;${r.gap?'color:var(--red)':''}">${r.gap?'+'+fm(r.gap):'✓'}</td></tr>`).join('')}
-      </tbody></table></div>`;
-  document.getElementById('gsel').addEventListener('change',e=>{gMode=e.target.value;document.getElementById('cdw').style.display=gMode==='custom'?'flex':'none';rForecast()});
-  const gf=document.getElementById('gfrom'),gt=document.getElementById('gto');
-  if(gf)gf.addEventListener('change',e=>{csFrom=e.target.value;if(csFrom&&csTo)rForecast()});
-  if(gt)gt.addEventListener('change',e=>{csTo=e.target.value;if(csFrom&&csTo)rForecast()});
+
+function populateInvTable(ib,velSrc,dvInv){
+  const tbody=document.getElementById('inv-tbody');
+  if(!tbody)return;
+  let rows='';
+  const hasAllSkus=Object.keys(ALL_SKUS_DATA).length>0;
+  const CORE_NAMES=new Set(CORE_P);
+  const GIFT_NAMES=new Set(GIFT_P);
+
+  if(!hasAllSkus){
+    rows+=CORE_P.map(p=>{const s=STOCK[aFC]?.[p]??0,b=ib[aFC]?.[p]??0,dl=velSrc[aFC]?.[p]??0,d=dvInv(aFC,p);return '<tr><td style="font-weight:600">'+p+'</td><td style="font-size:11px;color:var(--text2)">—</td><td><span class="bdg bmu">core</span></td><td style="text-align:right">'+fm(s)+'</td><td style="text-align:right;color:var(--blue)">'+(b?'+'+fm(b):'—')+'</td><td style="text-align:right;font-weight:600">'+fm(s+b)+'</td><td style="text-align:right">'+(dl?dl+'/d':'—')+'</td><td style="text-align:right;font-weight:600">'+(d===null?'—':d+'d')+'</td><td style="text-align:right">'+bdg(d)+'</td></tr>';}).join('');
+    rows+='<tr><td colspan="9" style="font-size:10px;font-weight:700;color:var(--text2);background:var(--bg2);padding:5px 10px;letter-spacing:.06em;text-transform:uppercase">FREE GIFTS / ADD-ONS</td></tr>';
+    rows+=GIFT_P.map(p=>{const s=STOCK[aFC]?.[p]??0,b=ib[aFC]?.[p]??0,dl=velSrc[aFC]?.[p]??0,d=dvInv(aFC,p);return '<tr><td style="font-weight:600">'+p+'</td><td style="font-size:11px;color:var(--text2)">—</td><td><span class="bdg bin">gift</span></td><td style="text-align:right">'+fm(s)+'</td><td style="text-align:right;color:var(--blue)">'+(b?'+'+fm(b):'—')+'</td><td style="text-align:right;font-weight:600">'+fm(s+b)+'</td><td style="text-align:right">'+(dl?dl+'/d':'—')+'</td><td style="text-align:right;font-weight:600">'+(d===null?'—':d+'d')+'</td><td style="text-align:right">'+bdg(d)+'</td></tr>';}).join('');
+    tbody.innerHTML=rows;
+    return;
+  }
+
+  // Group SKUs by product title
+  const byProduct={};
+  for(const[sku,info]of Object.entries(ALL_SKUS_DATA)){
+    const key=info.productTitle||sku;
+    if(!byProduct[key])byProduct[key]=[];
+    byProduct[key].push(Object.assign({sku},info));
+  }
+
+  // Sort: core first, then gifts, then others
+  const sorted=Object.entries(byProduct).sort(([a,av],[b,bv])=>{
+    const aC=av.some(s=>CORE_NAMES.has(s.display_name));
+    const bC=bv.some(s=>CORE_NAMES.has(s.display_name));
+    const aG=av.some(s=>GIFT_NAMES.has(s.display_name));
+    const bG=bv.some(s=>GIFT_NAMES.has(s.display_name));
+    if(aC&&!bC)return -1;if(!aC&&bC)return 1;
+    if(aG&&!bG)return -1;if(!aG&&bG)return 1;
+    return a.localeCompare(b);
+  });
+
+  let lastSection='';
+  for(const[productTitle,skus]of sorted){
+    const isCore=skus.some(s=>CORE_NAMES.has(s.display_name));
+    const isGift=skus.some(s=>GIFT_NAMES.has(s.display_name));
+    const section=isCore?'Core Products':isGift?'Free Gifts / Add-ons':'Other Products';
+    if(section!==lastSection){
+      rows+='<tr><td colspan="9" style="font-size:10px;font-weight:700;color:var(--text2);background:var(--bg2);padding:5px 10px;letter-spacing:.06em;text-transform:uppercase">'+section+'</td></tr>';
+      lastSection=section;
+    }
+    for(const skuInfo of skus){
+      const stock=aFC==='vi'?(skuInfo.au_stock||0):(STOCK.tw[skuInfo.display_name||productTitle]??0);
+      const inbQty=aFC==='vi'?(ib.vi?.[skuInfo.display_name||productTitle]??0):(ib.tw?.[skuInfo.display_name||productTitle]??0);
+      const dl=aFC==='vi'?(skuInfo.velocity_au||0):(skuInfo.velocity_us||0);
+      const d=stock>0&&dl>0?Math.floor(stock/dl):stock===0?null:999;
+      const badge=isCore?'<span class="bdg bmu">core</span>':isGift?'<span class="bdg bin">gift</span>':'<span class="bdg bmu" style="color:var(--text3);font-size:10px">other</span>';
+      const variant=skuInfo.variantTitle?' <span style="color:var(--text3);font-size:11px">· '+skuInfo.variantTitle+'</span>':'';
+      rows+='<tr>'
+        +'<td style="font-weight:600">'+productTitle+variant+'</td>'
+        +'<td style="font-size:11px;color:var(--text2);font-family:monospace">'+skuInfo.sku+'</td>'
+        +'<td>'+badge+'</td>'
+        +'<td style="text-align:right">'+fm(stock)+'</td>'
+        +'<td style="text-align:right;color:var(--blue)">'+(inbQty?'+'+fm(inbQty):'—')+'</td>'
+        +'<td style="text-align:right;font-weight:600">'+fm(stock+inbQty)+'</td>'
+        +'<td style="text-align:right">'+(dl?dl+'/d':'—')+'</td>'
+        +'<td style="text-align:right;font-weight:600">'+(d===null?'—':d+'d')+'</td>'
+        +'<td style="text-align:right">'+bdg(d)+'</td>'
+        +'</tr>';
+    }
+  }
+  tbody.innerHTML=rows;
 }
 function uReorder(){
   const el=document.getElementById('rr');if(!el)return;
