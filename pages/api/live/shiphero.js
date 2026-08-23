@@ -15,9 +15,11 @@ const SKU_TO_PRODUCT = {
 }
 
 async function getToken() {
-  // Use direct API token if available
-  if (process.env.SHIPHERO_API_TOKEN) {
-    return process.env.SHIPHERO_API_TOKEN
+  // Use direct API token if available (this is what worked originally)
+  const directToken = process.env.SHIPHERO_API_TOKEN || process.env.SHIPHERO_TOKEN
+  if (directToken) {
+    console.log('[ShipHero] Using direct API token')
+    return directToken
   }
 
   if (_token && Date.now() < _tokenExpiry) return _token
