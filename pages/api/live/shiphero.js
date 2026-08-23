@@ -1,7 +1,7 @@
 // pages/api/live/shiphero.js
 
-let _token = null;
-let _tokenExpiry = 0;
+let _token = null
+let _tokenExpiry = 0
 
 const SKU_TO_PRODUCT = {
   'BWc&c-MANLY': 'Body Wash',
@@ -20,13 +20,28 @@ async function getToken() {
   const email = process.env.SHIPHERO_EMAIL
   const password = process.env.SHIPHERO_PASSWORD
 
-  if (!email || !password) throw new Error('SHIPHERO_EMAIL / SHIPHERO_PASSWORD not set')
+  if (!email) throw new Error('SHIPHERO_EMAIL not set in Vercel env vars')
+  if (!password) throw new Error('SHIPHERO_PASSWORD not set in Vercel env vars')
 
-  const r = await fetch('https://public-api.shiphero.com/auth/token', {
+  console.log('[ShipHero] Authenticating as:', email)
+
+  // Try JSON first (standard)
+  let r = await fetch('https://public-api.shiphero.com/auth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password })
+    body: JSON.stringify({ username: email, password })
   })
+
+  // If JSON fails, try form-encoded
+  if (!r.ok) {
+    const jsonErr = await r.text()
+    console.log('[ShipHero] JSON auth failed:', jsonErr, '— trying form-encoded')
+    r = await fetch('https://public-api.shiphero.com/auth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `username=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`
+    })
+  }
 
   if (!r.ok) {
     const t = await r.text()
@@ -36,6 +51,7 @@ async function getToken() {
   const d = await r.json()
   _token = d.access_token
   _tokenExpiry = Date.now() + (d.expires_in || 3600) * 1000 - 60000
+  console.log('[ShipHero] Auth success, token expires in:', d.expires_in, 's')
   return _token
 }
 
@@ -59,10 +75,6 @@ export default async function handler(req, res) {
   try {
     const token = await getToken()
 
-    // Query products by SKU for each tracked SKU
-    const SKUS = Object.keys(SKU_TO_PRODUCT)
-    
-    // Fetch all products with pagination, matching our SKUs
     const query = `
       query GetProducts($after: String) {
         products(after: $after) {
@@ -74,7 +86,6 @@ export default async function handler(req, res) {
               warehouse_products {
                 on_hand
                 available
-                allocated
                 warehouse { identifier }
               }
             }
@@ -83,6 +94,7 @@ export default async function handler(req, res) {
       }
     `
 
+    const SKUS = Object.keys(SKU_TO_PRODUCT)
     const stockBySku = {}
     let after = null
     let pages = 0
@@ -100,13 +112,11 @@ export default async function handler(req, res) {
         const sku = node.sku?.trim()
         if (!sku || !SKU_TO_PRODUCT[sku]) continue
 
-        // Sum across all warehouses (ShipHero only manages US/Tidal Wave)
         let available = 0, on_hand = 0
         for (const wp of node.warehouse_products || []) {
           available += wp.available || 0
           on_hand += wp.on_hand || 0
         }
-
         stockBySku[sku] = { available, on_hand, name: node.name }
       }
 
@@ -115,21 +125,15 @@ export default async function handler(req, res) {
       pages++
     }
 
-    // Build response keyed by product display name (for frontend compatibility)
     const stock = {}
-    const stockBySkuOut = {}
-
     for (const [sku, productName] of Object.entries(SKU_TO_PRODUCT)) {
       const s = stockBySku[sku] || { available: 0, on_hand: 0 }
       stock[productName] = { available: s.available, on_hand: s.on_hand }
-      stockBySkuOut[sku] = s
     }
 
     return res.json({
       ok: true,
-      stock,           // keyed by product name (Body Wash, etc.)
-      stock_by_sku: stockBySkuOut,  // keyed by SKU for debugging
-      pages_fetched: pages,
+      stock,
       skus_found: Object.keys(stockBySku),
       skus_missing: SKUS.filter(s => !stockBySku[s]),
     })
