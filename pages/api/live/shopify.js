@@ -95,6 +95,7 @@ export default async function handler(req, res) {
       for (const v of p.variants) {
         if (!v.sku) continue
         const sku = v.sku.trim()
+        if (!sku || sku.length === 0) continue // skip blank SKUs
         if (v.inventory_item_id) {
           itemToSku[String(v.inventory_item_id)] = sku
           skuToItemId[sku] = String(v.inventory_item_id)
