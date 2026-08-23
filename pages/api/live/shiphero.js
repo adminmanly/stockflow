@@ -20,28 +20,14 @@ async function getToken() {
   const email = process.env.SHIPHERO_EMAIL
   const password = process.env.SHIPHERO_PASSWORD
 
-  if (!email) throw new Error('SHIPHERO_EMAIL not set in Vercel env vars')
-  if (!password) throw new Error('SHIPHERO_PASSWORD not set in Vercel env vars')
+  if (!email) throw new Error('SHIPHERO_EMAIL not set')
+  if (!password) throw new Error('SHIPHERO_PASSWORD not set')
 
-  console.log('[ShipHero] Authenticating as:', email)
-
-  // Try JSON first (standard)
-  let r = await fetch('https://public-api.shiphero.com/auth/token', {
+  const r = await fetch('https://public-api.shiphero.com/auth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username: email, password })
   })
-
-  // If JSON fails, try form-encoded
-  if (!r.ok) {
-    const jsonErr = await r.text()
-    console.log('[ShipHero] JSON auth failed:', jsonErr, '— trying form-encoded')
-    r = await fetch('https://public-api.shiphero.com/auth/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `username=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`
-    })
-  }
 
   if (!r.ok) {
     const t = await r.text()
@@ -51,7 +37,6 @@ async function getToken() {
   const d = await r.json()
   _token = d.access_token
   _tokenExpiry = Date.now() + (d.expires_in || 3600) * 1000 - 60000
-  console.log('[ShipHero] Auth success, token expires in:', d.expires_in, 's')
   return _token
 }
 
@@ -64,8 +49,9 @@ async function gql(token, query, variables = {}) {
     },
     body: JSON.stringify({ query, variables })
   })
-  if (!r.ok) throw new Error(`ShipHero GraphQL ${r.status}`)
-  return r.json()
+  const text = await r.text()
+  if (!r.ok) throw new Error(`ShipHero GraphQL ${r.status}: ${text.slice(0, 300)}`)
+  return JSON.parse(text)
 }
 
 export default async function handler(req, res) {
@@ -75,10 +61,11 @@ export default async function handler(req, res) {
   try {
     const token = await getToken()
 
-    const query = `
-      query GetProducts($after: String) {
-        products(after: $after) {
-          pageInfo { hasNextPage endCursor }
+    // Simpler query without cursor pagination first
+    const query = `{
+      products {
+        request_id
+        data(first: 200) {
           edges {
             node {
               sku
@@ -86,28 +73,58 @@ export default async function handler(req, res) {
               warehouse_products {
                 on_hand
                 available
-                warehouse { identifier }
               }
             }
           }
+          pageInfo {
+            has_next_page
+            cursor
+          }
         }
       }
-    `
+    }`
 
-    const SKUS = Object.keys(SKU_TO_PRODUCT)
     const stockBySku = {}
-    let after = null
+    let cursor = null
     let pages = 0
 
     while (pages < 15) {
-      const d = await gql(token, query, { after })
-      const products = d?.data?.products
-      if (!products) {
+      const pageQuery = cursor ? `{
+        products {
+          request_id
+          data(first: 200, after: "${cursor}") {
+            edges {
+              node {
+                sku
+                name
+                warehouse_products {
+                  on_hand
+                  available
+                }
+              }
+            }
+            pageInfo {
+              has_next_page
+              cursor
+            }
+          }
+        }
+      }` : query
+
+      const d = await gql(token, pageQuery)
+
+      if (d.errors) {
+        console.error('[ShipHero] GraphQL errors:', JSON.stringify(d.errors))
+        throw new Error('GraphQL error: ' + JSON.stringify(d.errors).slice(0, 200))
+      }
+
+      const data = d?.data?.products?.data
+      if (!data) {
         console.error('[ShipHero] Unexpected response:', JSON.stringify(d).slice(0, 300))
         break
       }
 
-      for (const edge of products.edges || []) {
+      for (const edge of data.edges || []) {
         const node = edge.node
         const sku = node.sku?.trim()
         if (!sku || !SKU_TO_PRODUCT[sku]) continue
@@ -120,8 +137,8 @@ export default async function handler(req, res) {
         stockBySku[sku] = { available, on_hand, name: node.name }
       }
 
-      if (!products.pageInfo?.hasNextPage) break
-      after = products.pageInfo.endCursor
+      if (!data.pageInfo?.has_next_page) break
+      cursor = data.pageInfo.cursor
       pages++
     }
 
@@ -134,8 +151,9 @@ export default async function handler(req, res) {
     return res.json({
       ok: true,
       stock,
+      pages_fetched: pages,
       skus_found: Object.keys(stockBySku),
-      skus_missing: SKUS.filter(s => !stockBySku[s]),
+      skus_missing: Object.keys(SKU_TO_PRODUCT).filter(s => !stockBySku[s]),
     })
 
   } catch (err) {
