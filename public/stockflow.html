@@ -732,31 +732,55 @@ function populateInvTable(ib,velSrc,dvInv){
       rows+='<tr><td colspan="9" style="font-size:10px;font-weight:700;color:var(--text2);background:var(--bg2);padding:5px 10px;letter-spacing:.06em;text-transform:uppercase">'+section+'</td></tr>';
       lastSection=section;
     }
-    // Consolidate all variants into single row — sum stock, sum velocity
-    const totalStock = skus.reduce((s,si)=>{
-      return s + (aFC==='vi'?(si.au_stock||0):(STOCK.tw[si.display_name||productTitle]??0));
-    }, 0);
-    const totalInb = skus.reduce((s,si)=>{
-      return s + (aFC==='vi'?(ib.vi?.[si.display_name||productTitle]??0):(ib.tw?.[si.display_name||productTitle]??0));
-    }, 0);
-    const totalDl = skus.reduce((s,si)=>{
-      return s + (aFC==='vi'?(si.velocity_au||0):(si.velocity_us||0));
-    }, 0);
-    const d=totalStock>0&&totalDl>0?Math.floor(totalStock/totalDl):totalStock===0?null:999;
     const badge=isCore?'<span class="bdg bmu">core</span>':isGift?'<span class="bdg bin">gift</span>':'<span class="bdg bmu" style="color:var(--text3);font-size:10px">other</span>';
-    // Show SKU(s) — if multiple variants, show count
-    const skuLabel = skus.length===1 ? skus[0].sku : skus[0].sku+' +'+( skus.length-1)+' var.';
-    rows+='<tr>'
-      +'<td style="font-weight:600">'+productTitle+'</td>'
-      +'<td style="font-size:11px;color:var(--text2);font-family:monospace">'+skuLabel+'</td>'
-      +'<td>'+badge+'</td>'
-      +'<td style="text-align:right">'+fm(totalStock)+'</td>'
-      +'<td style="text-align:right;color:var(--blue)">'+(totalInb?'+'+fm(totalInb):'—')+'</td>'
-      +'<td style="text-align:right;font-weight:600">'+fm(totalStock+totalInb)+'</td>'
-      +'<td style="text-align:right">'+(totalDl?totalDl.toFixed(1)+'/d':'—')+'</td>'
-      +'<td style="text-align:right;font-weight:600">'+(d===null?'—':d+'d')+'</td>'
-      +'<td style="text-align:right">'+bdg(d)+'</td>'
-      +'</tr>';
+    // If all variants have the same/no variant title, consolidate into one row
+    // If they have meaningful variant titles (scents etc), show each individually
+    const hasVariants = skus.length > 1 && skus.some(s=>s.variantTitle&&s.variantTitle!=='');
+    const SCENT_KEYWORDS = ['citrus','cedar','coconut','forest','oak','mint','charcoal','birch','breeze','coast','tactical'];
+    const isScentVariant = hasVariants && skus.some(s=>{
+      const t=(s.variantTitle||'').toLowerCase();
+      return SCENT_KEYWORDS.some(k=>t.includes(k));
+    });
+
+    if(isScentVariant){
+      // Show each scent as its own row
+      for(const si of skus){
+        const stock=aFC==='vi'?(si.au_stock||0):(STOCK.tw[si.display_name||productTitle]??0);
+        const inbQty=aFC==='vi'?(ib.vi?.[si.display_name||productTitle]??0):(ib.tw?.[si.display_name||productTitle]??0);
+        const dl=aFC==='vi'?(si.velocity_au||0):(si.velocity_us||0);
+        const d=stock>0&&dl>0?Math.floor(stock/dl):stock===0?null:999;
+        const label=productTitle+(si.variantTitle?' · '+si.variantTitle:'');
+        rows+='<tr>'
+          +'<td style="font-weight:600">'+label+'</td>'
+          +'<td style="font-size:11px;color:var(--text2);font-family:monospace">'+si.sku+'</td>'
+          +'<td>'+badge+'</td>'
+          +'<td style="text-align:right">'+fm(stock)+'</td>'
+          +'<td style="text-align:right;color:var(--blue)">'+(inbQty?'+'+fm(inbQty):'—')+'</td>'
+          +'<td style="text-align:right;font-weight:600">'+fm(stock+inbQty)+'</td>'
+          +'<td style="text-align:right">'+(dl?dl.toFixed(1)+'/d':'—')+'</td>'
+          +'<td style="text-align:right;font-weight:600">'+(d===null?'—':d+'d')+'</td>'
+          +'<td style="text-align:right">'+bdg(d)+'</td>'
+          +'</tr>';
+      }
+    } else {
+      // Consolidate into single row
+      const totalStock=skus.reduce((s,si)=>s+(aFC==='vi'?(si.au_stock||0):(STOCK.tw[si.display_name||productTitle]??0)),0);
+      const totalInb=skus.reduce((s,si)=>s+(aFC==='vi'?(ib.vi?.[si.display_name||productTitle]??0):(ib.tw?.[si.display_name||productTitle]??0)),0);
+      const totalDl=skus.reduce((s,si)=>s+(aFC==='vi'?(si.velocity_au||0):(si.velocity_us||0)),0);
+      const d=totalStock>0&&totalDl>0?Math.floor(totalStock/totalDl):totalStock===0?null:999;
+      const skuLabel=skus.length===1?skus[0].sku:skus[0].sku+' +'+( skus.length-1)+' var.';
+      rows+='<tr>'
+        +'<td style="font-weight:600">'+productTitle+'</td>'
+        +'<td style="font-size:11px;color:var(--text2);font-family:monospace">'+skuLabel+'</td>'
+        +'<td>'+badge+'</td>'
+        +'<td style="text-align:right">'+fm(totalStock)+'</td>'
+        +'<td style="text-align:right;color:var(--blue)">'+(totalInb?'+'+fm(totalInb):'—')+'</td>'
+        +'<td style="text-align:right;font-weight:600">'+fm(totalStock+totalInb)+'</td>'
+        +'<td style="text-align:right">'+(totalDl?totalDl.toFixed(1)+'/d':'—')+'</td>'
+        +'<td style="text-align:right;font-weight:600">'+(d===null?'—':d+'d')+'</td>'
+        +'<td style="text-align:right">'+bdg(d)+'</td>'
+        +'</tr>';
+    }
   }
   tbody.innerHTML=rows;
 }
