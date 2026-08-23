@@ -101,15 +101,38 @@ export default async function handler(req, res) {
 
         // Skip all bundle/kit SKUs — these are multi-product bundles not individual items
         const BUNDLE_SKUS = new Set([
+          // Kits & bundles
           'BCKc&c','SEC&C','HCKc&c','STKc&c','BPc&c',
           'SE','SE2','BE','WPC&C','OLDSE','SRO',
           'ACNEKIT','BACNE','REPAIR','SKINDEFENCE','RESTOREHYDRATE',
           'SC+B+CC+B',
           // DUO products
           'DSCB+B-DUO','DSMO+B-DUO','DSFF+B-DUO','DSCC+B-DUO',
-          // Gift card / other non-physical
+          // Old/discontinued
+          'D-OLD','BW-OLD',
+          // 2-packs
+          'Dc&c-MANLY-2PK','BWc&c-MANLY-2PK',
+          // Loyalty variants
+          'CW-MANLY-LOYAL',
+          // Non-physical / digital
+          'OEBT','TEBT','TS','ACNESCRUB',
         ])
-        if (BUNDLE_SKUS.has(sku)) continue // skip kits and bundles
+        if (BUNDLE_SKUS.has(sku)) continue
+
+        // Skip SKU patterns for bundles (suffix-based)
+        if (sku.endsWith('-MOM2')) continue   // Momentum bundles
+        if (sku.endsWith('-YR6')) continue    // Year One bundles
+        if (sku.endsWith('-GRAD')) continue   // Graduation bundles
+        if (sku.endsWith('-DUO')) continue    // Duo sets
+
+        // Skip product titles that are bundle/kit products
+        const SKIP_TITLE_PATTERNS = [
+          'momentum bundle','year one bundle','graduation bundle',
+          'duo set','2 pack','kills teen odor new','loyalty',
+          'ebook','health guide','texture spray','acne scrub',
+        ]
+        const titleLower = (p.title || '').toLowerCase()
+        if (SKIP_TITLE_PATTERNS.some(pat => titleLower.includes(pat))) continue
 
         // Skip variant suffixes — consolidate by product title instead
         // e.g. BWC+B, BWC+B2, BWC+B3, BWC+B4 all become 1 row grouped by productTitle
