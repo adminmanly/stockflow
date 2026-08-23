@@ -97,7 +97,7 @@ export default async function handler(req, res) {
                 warehouse_products { on_hand available }
               }
             }
-            pageInfo { has_next_page cursor }
+            pageInfo { hasNextPage cursor }
           }
         }
       }`
@@ -119,8 +119,8 @@ export default async function handler(req, res) {
         stockBySku[sku] = { available, on_hand }
       }
 
-      if (!data.pageInfo?.has_next_page) break
-      cursor = data.pageInfo.cursor
+      if (!data.pageInfo?.hasNextPage) break
+      cursor = data.pageInfo.endCursor
       pages++
     }
 
