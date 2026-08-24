@@ -15,18 +15,13 @@ const SKU_TO_PRODUCT = {
 }
 
 async function getToken() {
-  // Use direct API token if available (this is what worked originally)
   const directToken = process.env.SHIPHERO_API_TOKEN || process.env.SHIPHERO_TOKEN
-  if (directToken) {
-    console.log('[ShipHero] Using direct API token')
-    return directToken
-  }
+  if (directToken) return directToken
 
   if (_token && Date.now() < _tokenExpiry) return _token
 
   const email = process.env.SHIPHERO_EMAIL
   const password = process.env.SHIPHERO_PASSWORD
-
   if (!email) throw new Error('SHIPHERO_EMAIL not set')
   if (!password) throw new Error('SHIPHERO_PASSWORD not set')
 
@@ -35,12 +30,10 @@ async function getToken() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username: email, password })
   })
-
   if (!r.ok) {
     const t = await r.text()
     throw new Error(`ShipHero auth failed ${r.status}: ${t.slice(0, 200)}`)
   }
-
   const d = await r.json()
   _token = d.access_token
   _tokenExpiry = Date.now() + (d.expires_in || 3600) * 1000 - 60000
@@ -58,11 +51,7 @@ async function gql(token, query) {
   })
   const text = await r.text()
   if (!r.ok) throw new Error(`GraphQL ${r.status}: ${text.slice(0, 400)}`)
-  try {
-    return JSON.parse(text)
-  } catch(e) {
-    throw new Error(`GraphQL parse error: ${text.slice(0, 200)}`)
-  }
+  return JSON.parse(text)
 }
 
 export default async function handler(req, res) {
@@ -71,42 +60,45 @@ export default async function handler(req, res) {
 
   try {
     const token = await getToken()
-
-    // Minimal test query first
-    const testQuery = `{ products { request_id data(first: 5) { edges { node { sku name } } } } }`
-    const testResult = await gql(token, testQuery)
-
-    if (testResult.errors) {
-      throw new Error('GraphQL errors: ' + JSON.stringify(testResult.errors).slice(0, 300))
-    }
-
-    // If test works, fetch with warehouse_products
     const stockBySku = {}
-    let cursor = null
+    let after = null
     let pages = 0
 
     while (pages < 15) {
-      const q = `{
+      const afterClause = after ? `, after: "${after}"` : ''
+      const query = `{
         products {
           request_id
-          data(first: 200${cursor ? `, after: "${cursor}"` : ''}) {
+          data(first: 200${afterClause}) {
             edges {
               node {
                 sku
                 name
-                warehouse_products { on_hand available }
+                warehouse_products {
+                  on_hand
+                  available
+                }
               }
             }
-            pageInfo { hasNextPage cursor }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
           }
         }
       }`
 
-      const d = await gql(token, q)
-      if (d.errors) throw new Error(JSON.stringify(d.errors).slice(0, 300))
+      const d = await gql(token, query)
+
+      if (d.errors) {
+        throw new Error('GraphQL errors: ' + JSON.stringify(d.errors).slice(0, 300))
+      }
 
       const data = d?.data?.products?.data
-      if (!data) break
+      if (!data) {
+        console.error('[ShipHero] No data in response:', JSON.stringify(d).slice(0, 200))
+        break
+      }
 
       for (const edge of data.edges || []) {
         const sku = edge.node.sku?.trim()
@@ -120,7 +112,7 @@ export default async function handler(req, res) {
       }
 
       if (!data.pageInfo?.hasNextPage) break
-      cursor = data.pageInfo.endCursor
+      after = data.pageInfo.endCursor
       pages++
     }
 
