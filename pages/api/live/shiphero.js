@@ -4,6 +4,7 @@ let _token = null
 let _tokenExpiry = 0
 
 const SKU_TO_PRODUCT = {
+  // Core tracked SKUs
   'BWc&c-MANLY': 'Body Wash',
   'Dc&c-MANLY':  'Deodorant',
   'SHAc&c-MANLY':'Shampoo',
@@ -12,6 +13,17 @@ const SKU_TO_PRODUCT = {
   'BB-MANLY':    'Body Buffer',
   'SCALP-MANLY': 'Scalp Scrubber',
   'CW-MANLY':    'Cooling Wipes',
+  // Natural scent variants
+  'BWC+B':  'Natural Body Wash · Citrus Breeze',
+  'BWC+C':  'Natural Body Wash · Coconut Coast',
+  'BWF+F':  'Natural Body Wash · Fresh Forest',
+  'BWM+O':  'Natural Body Wash · Midnight Oak',
+  'CONC+B': 'Natural Conditioner',
+  'DC+B':   'Natural Deodorant · Citrus Breeze',
+  'DC+C':   'Natural Deodorant · Coconut Coast',
+  'DF+F':   'Natural Deodorant · Fresh Forest',
+  'DM+O':   'Natural Deodorant · Midnight Oak',
+  'SHC+B':  'Natural Shampoo',
 }
 
 async function getToken() {
