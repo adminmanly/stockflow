@@ -93,6 +93,10 @@ export default async function handler(req, res) {
 
     for (const p of allProducts) {
       for (const v of p.variants) {
+        // Debug specific SKU
+        if (v.sku && v.sku.trim() === 'CONC+B') {
+          console.log('[DEBUG CONC+B] Found in product:', p.title, '| variant:', v.title)
+        }
         if (!v.sku) continue
         const sku = v.sku.trim()
         if (!sku || sku.length === 0) continue // skip blank SKUs
@@ -108,8 +112,7 @@ export default async function handler(req, res) {
           'SC+B+CC+B',
           // DUO products
           'DSCB+B-DUO','DSMO+B-DUO','DSFF+B-DUO','DSCC+B-DUO',
-          // Old/discontinued
-          'D-OLD','BW-OLD',
+          // Old/discontinued — removed, show in inventory
           // 2-packs
           'Dc&c-MANLY-2PK','BWc&c-MANLY-2PK',
           // Loyalty variants
@@ -125,6 +128,23 @@ export default async function handler(req, res) {
         if (sku.endsWith('-GRAD')) continue   // Graduation bundles
         if (sku.endsWith('-DUO')) continue    // Duo sets
 
+        // These SKUs always show regardless of title matching
+        const ALWAYS_SHOW = new Set([
+          // Core scent variants - conditioner, body wash, deodorant, shampoo scents
+          'CONC+B','CONC+C','CONF+F','CONM+O',
+          'BWC+B','BWC+C','BWF+F','BWM+O',
+          'DC+B','DC+C','DF+F','DM+O',
+          'SHC+B','SHC+C','SHF+F','SHM+O',
+          // Old/discontinued products
+          'BW-OLD','D-OLD',
+          // Main tracked SKUs
+          'BWc&c-MANLY','Dc&c-MANLY','SHAc&c-MANLY','CONc&c-MANLY',
+          'SSC&C','BB-MANLY','SCALP-MANLY','CW-MANLY',
+        ])
+        if (ALWAYS_SHOW.has(sku)) {
+          // Don't filter — fall through to allDiscoveredSkus
+        } else {
+
         // Skip product titles that are bundle/kit products
         const SKIP_TITLE_PATTERNS = [
           'momentum bundle','year one bundle','graduation bundle',
@@ -133,6 +153,7 @@ export default async function handler(req, res) {
         ]
         const titleLower = (p.title || '').toLowerCase()
         if (SKIP_TITLE_PATTERNS.some(pat => titleLower.includes(pat))) continue
+        } // end else (not in ALWAYS_SHOW)
 
         // Skip variant suffixes — consolidate by product title instead
         // e.g. BWC+B, BWC+B2, BWC+B3, BWC+B4 all become 1 row grouped by productTitle
