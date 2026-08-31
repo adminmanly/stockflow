@@ -146,6 +146,9 @@ export default async function handler(req, res) {
     return res.json({
       ok: true,
       stock,
+      stock_by_sku: Object.fromEntries(
+        Object.entries(stockBySku).map(([sku, s]) => [sku, s.available || 0])
+      ),
       skus_found: Object.keys(stockBySku),
       skus_missing: Object.keys(SKU_TO_PRODUCT).filter(s => !stockBySku[s]),
     })
