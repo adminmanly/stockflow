@@ -754,7 +754,8 @@ function populateInvTable(ib,velSrc,dvInv){
     if(isScentVariant){
       // Show each scent as its own row
       for(const si of skus){
-        const stock=aFC==='vi'?(si.au_stock||0):(STOCK.tw[si.display_name||productTitle]??0);
+        const twS=STOCK.tw['__sku__'+si.sku]??STOCK.tw[si.display_name||productTitle]??0;
+        const stock=aFC==='vi'?(si.au_stock||0):twS;
         const inbQty=aFC==='vi'?(ib.vi?.[si.display_name||productTitle]??0):(ib.tw?.[si.display_name||productTitle]??0);
         const dl=aFC==='vi'?(si.velocity_au||0):(si.velocity_us||0);
         const d=stock>0&&dl>0?Math.floor(stock/dl):stock===0?null:999;
