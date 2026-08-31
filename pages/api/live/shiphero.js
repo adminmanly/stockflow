@@ -114,7 +114,12 @@ export default async function handler(req, res) {
 
       for (const edge of data.edges || []) {
         const sku = edge.node.sku?.trim()
-        if (!sku || !SKU_TO_PRODUCT[sku]) continue
+        if (!sku) continue
+        // Log scent variant SKUs to check formatting
+        if (sku.includes('+') || sku.includes('BWC') || sku.includes('DC+') || sku.includes('DF+') || sku.includes('DM+') || sku.includes('CON') || sku.includes('SHC')) {
+          console.log('[ShipHero] Found variant SKU:', sku)
+        }
+        if (!SKU_TO_PRODUCT[sku]) continue
         let available = 0, on_hand = 0
         for (const wp of edge.node.warehouse_products || []) {
           available += wp.available || 0
@@ -133,6 +138,10 @@ export default async function handler(req, res) {
       const s = stockBySku[sku] || { available: 0, on_hand: 0 }
       stock[name] = { available: s.available, on_hand: s.on_hand }
     }
+
+    // Log all SKUs found for debugging
+    console.log('[ShipHero] All SKUs found:', Object.keys(stockBySku))
+    console.log('[ShipHero] Missing SKUs:', Object.keys(SKU_TO_PRODUCT).filter(s => !stockBySku[s]))
 
     return res.json({
       ok: true,
