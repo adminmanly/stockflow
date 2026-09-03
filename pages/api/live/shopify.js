@@ -303,9 +303,23 @@ export default async function handler(req, res) {
       cogsByProduct[productName] = cogsBySku[sku] || 0
     }
 
+    // Fulfillment aliases — old SKUs are fulfilled using new scent SKUs
+    // BW-OLD → fulfilled as BWC+B (Citrus Breeze), D-OLD → fulfilled as DC+B
+    const FULFILLMENT_ALIASES = {
+      'BW-OLD': 'BWC+B',
+      'D-OLD':  'DC+B',
+    }
+    // Merge alias velocities into target SKUs
+    for (const [aliasSku, targetSku] of Object.entries(FULFILLMENT_ALIASES)) {
+      if (soldBySkuUS[aliasSku]) soldBySkuUS[targetSku] = (soldBySkuUS[targetSku] || 0) + soldBySkuUS[aliasSku]
+      if (soldBySkuAU[aliasSku]) soldBySkuAU[targetSku] = (soldBySkuAU[targetSku] || 0) + soldBySkuAU[aliasSku]
+    }
+
     // Build full SKU catalogue with stock + velocity for ALL discovered SKUs
     const allSkusData = {}
     for (const [sku, info] of Object.entries(allDiscoveredSkus)) {
+      // Skip alias SKUs — they're combined into the target SKU
+      if (Object.keys(FULFILLMENT_ALIASES).includes(sku)) continue
       const rv = revBySku[sku]
       allSkusData[sku] = {
         ...info,
